@@ -1,0 +1,20 @@
+[package]
+name = "mini-recsys"
+version = "0.1.0"
+edition = "2021"
+description = "A hybrid Rust/C++ recommendation system demo for learning purposes"
+
+[dependencies]
+# Web Framework - 模块化和人体工学的 Web 框架
+axum = "0.7"
+# Async Runtime - 异步运行时
+tokio = { version = "1.0", features = ["full"] }
+# Serialization - JSON 序列化支持
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+# FFI - 用于定义 C 类型
+libc = "0.2"
+
+[build-dependencies]
+# C/C++ 编译支持 - 用于编译 C++ 代码并链接到 Rust
+cc = "1.0"

@@ -1,0 +1,44 @@
+# Rust build outputs
+/target/
+Cargo.lock
+**/*.rs.bk
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.iml
+
+# Compilation artifacts
+*.o
+*.a
+*.so
+*.lib
+*.dll
+*.exe
+*.dylib
+
+# Build directories
+/build/
+/dist/
+
+# OS-specific files
+Thumbs.db
+.directory
+
+# Python cache (if applicable)
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Dependencies
+node_modules/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Environment files
+.env
+.env.local
