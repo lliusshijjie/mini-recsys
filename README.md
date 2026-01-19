@@ -1,187 +1,95 @@
-# Mini-RecSys
+# Mini-RecSys: Hybrid Rust/C++ Recommendation System
 
-A hybrid **Rust/C++** recommendation system demo for learning purposes. This project demonstrates practical FFI (Foreign Function Interface) usage between Rust and C++.
+A high-performance, full-stack recommendation system demo featuring a **Rust** web server, a **C++** calculation engine, and a **Vite/React** frontend. This project demonstrates practical FFI (Foreign Function Interface) usage and modern system architecture.
 
-## 📋 Project Overview
+## 🌟 Key Features
 
-Mini-RecSys is an educational project that showcases:
-- **Rust and C++ integration** via FFI (Foreign Function Interface)
-- **Vector operations** implemented in C++ and called from Rust
-- **Basic recommendation system architecture** with user embeddings and item scoring
-- **Modern async web framework** using Axum (web API support)
+-   **Hybrid Architecture**: Combines Rust's safety and concurrency with C++'s low-level performance.
+-   **Advanced FFI**: Optimized memory interaction for vector operations (Zero-copy views where possible).
+-   **Refined Scoring**: Multi-stage ranking combining C++ vector similarity (Recall) with business logic (Popularity weighting).
+-   **Smart Data Generation**: Category-based embedding system with L2 normalization and spatial noise.
+-   **Modern Web Stack**: Full-stack integration with Axum (Backend) and Vite (Frontend).
 
-## 🏗️ Architecture
+## 🏗️ System Architecture
 
-The project is structured into several key components:
+```mermaid
+graph TD
+    A[Frontend: Vite/React] -->|REST API| B[Backend: Rust/Axum]
+    B -->|FFI Call| C[Core: C++/Vector Search]
+    B -->|Load| D[Data: JSON/Embeddings]
+    C -->|Top-K Result| B
+```
 
-### Core Components
+### Component Breakdown
 
-1. **FFI Layer** (`src/ffi.rs`)
-   - Safe wrapper functions for C++ interop
-   - Vector dot product computation via C++
-   - Simple arithmetic operations for testing
+1.  **C++ Calculation Core (`cpp/`)**:
+    -   Implements high-performance `search_top_k` using `std::partial_sort`.
+    -   Handles flat-matrix memory layout for cache-friendly vector operations.
+2.  **Rust FFI Layer (`src/ffi.rs`)**:
+    -   Exposes safe wrappers for C++ functions.
+    -   Manages memory alignment and pointer safety during cross-boundary calls.
+3.  **Rust Web Service (`src/main.rs`, `src/service.rs`)**:
+    -   Asynchronous API endpoints powered by **Tokio** and **Axum**.
+    -   Implements the "Recall -> Rank" pipeline.
+4.  **Frontend (`frontend/`)**:
+    -   Modern UI for visualizing recommendations and user switching.
 
-2. **Data Models** (`src/model.rs`)
-   - `User`: User representation with embeddings
-   - `Item`: Product representation with embeddings
-   - Serialization support via `serde`
-
-3. **Business Logic** (`src/service.rs`)
-   - `RecommendationService`: Core recommendation engine
-   - Similarity scoring using dot products
-   - Top-K item recommendation
-
-4. **C++ Backend** (`cpp/`)
-   - `vector_ops.cpp/h`: Vector operation implementations
-   - Efficient dot product calculation
-   - FFI-compatible C functions
-
-## 🚀 Quick Start
+## 🚀 Getting Started
 
 ### Prerequisites
 
-- **Rust**: 1.70+ (install from [rustup.rs](https://rustup.rs/))
-- **C++ Compiler**:
-  - Windows: MSVC (Visual Studio)
-  - Linux: GCC or Clang
-  - macOS: Clang
+-   **Rust**: 1.75+ (Edition 2021)
+-   **C++ Compiler**: GCC 9+, Clang 10+, or MSVC 2019+
+-   **Node.js**: 18+ (for frontend)
 
-### Building
+### Installation & Run
 
-```bash
-# Build the project
-cargo build --release
+1.  **Clone and build the backend:**
+    ```bash
+    cargo build --release
+    cargo run
+    ```
+    *Server will start at `http://localhost:3000`*
 
-# Run the demo
-cargo run --release
-```
+2.  **Start the frontend:**
+    ```bash
+    cd frontend
+    npm install
+    npm run dev
+    ```
+    *UI will be available at `http://localhost:5173`*
 
-### Testing
+## 📊 Technical Deep Dive
 
-```bash
-# Run all tests
-cargo test
+### 1. Memory Interaction Protocol
+The project uses a "Flattened Matrix" layout. All item embeddings are merged into a single contiguous `Vec<f32>` before being passed to C++. This allows C++ to iterate through data with minimal cache misses.
 
-# Run with verbose output
-cargo test -- --nocapture
-```
+### 2. Embedding System
+Unlike random initialization, our system generates embeddings based on orthogonal category anchors (Electronics, Books, Home, Clothing).
+-   **Users**: Represented by a mixture of their preferred category vectors.
+-   **Items**: Generated with category-specific base vectors + L2 normalized noise.
 
-## 📊 How It Works
+### 3. API Endpoints
 
-### Recommendation Flow
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/users` | List all available demo users |
+| `GET` | `/recommend?uid={id}` | Get Top-10 personalized recommendations |
+| `GET` | `/health` | Server health check |
 
-1. **User Embedding**: Each user has a vector representation (embedding)
-2. **Item Embeddings**: Each item also has a vector representation
-3. **Similarity Scoring**: Compute dot product between user and item embeddings
-4. **Ranking**: Sort items by similarity score
-5. **Top-K Selection**: Return the top-K most similar items
+## 📦 Core Dependencies
 
-### FFI Integration
-
-The Rust code calls C++ functions through the FFI layer:
-
-```rust
-// Rust calls C++ dot product calculation
-ffi::compute_dot_product(&user.embedding, &item.embedding)
-```
-
-This demonstrates safe Rust-C++ interop with proper error handling and memory management.
-
-## 📦 Dependencies
-
-### Runtime
-- **axum**: Modern, modular web framework for building web APIs
-- **tokio**: Async runtime for concurrent operations
-- **serde/serde_json**: JSON serialization and deserialization
-- **libc**: C type definitions for FFI
-
-### Build
-- **cc**: Compile and link C/C++ code with Rust
-
-## 📚 Project Structure
-
-```
-Mini-RecSys/
-├── src/
-│   ├── main.rs           # Entry point, demo workflow
-│   ├── ffi.rs            # Rust-C++ FFI interface
-│   ├── model.rs          # Data models (User, Item)
-│   └── service.rs        # Business logic (Recommendations)
-├── cpp/
-│   ├── vector_ops.h      # C++ header files
-│   └── vector_ops.cpp    # C++ implementation
-├── build.rs              # Build script for C++ compilation
-├── Cargo.toml            # Rust project manifest
-└── README.md             # This file
-```
-
-## 🔧 Build Configuration
-
-The `build.rs` script automatically:
-- Detects available C++ compiler (GCC, Clang, MSVC)
-- Compiles C++ code with C++17 standard
-- Links the static library to the Rust binary
-- Watches for changes in `cpp/` directory
+-   `axum` & `tokio`: High-performance async web framework.
+-   `serde`: Robust serialization for JSON data.
+-   `cc`: Integrated build-time C++ compilation.
+-   `tower-http`: Middleware for CORS and security.
+-   `libc`: Native system types for FFI.
 
 ## 💡 Learning Objectives
-
-This project is designed to teach:
-1. **Rust FFI fundamentals** - Safe and unsafe code boundaries
-2. **C++ interoperability** - How to expose C functions for FFI
-3. **Build system integration** - Using cc crate for compilation
-4. **Recommendation systems basics** - Vector embeddings and similarity scoring
-5. **Systems programming** - Memory safety, performance, and concurrency
-
-## 🎯 Use Cases
-
-While educational, the architecture can be extended for:
-- Production recommendation systems
-- Collaborative filtering engines
-- Content-based recommendation systems
-- Vector similarity search applications
-
-## 📝 Example Usage
-
-```rust
-use mini_recsys::model::{User, Item};
-use mini_recsys::service::RecommendationService;
-
-// Create users and items with embeddings
-let user = User::new(1, vec![1.0, 2.0, 3.0, 4.0]);
-let items = vec![
-    Item::new(1, "Product A", vec![5.0, 6.0, 7.0, 8.0]),
-    Item::new(2, "Product B", vec![2.0, 3.0, 4.0, 5.0]),
-];
-
-// Create recommendation service
-let service = RecommendationService::new(items);
-
-// Get top-3 recommendations
-let recommendations = service.recommend(&user, 3);
-for (item, score) in recommendations {
-    println!("Item: {}, Score: {}", item.name, score);
-}
-```
-
-## 🤝 Contributing
-
-This is an educational project. Feel free to:
-- Extend the recommendation algorithm
-- Add more C++ vector operations
-- Implement web API endpoints with Axum
-- Add comprehensive test cases
-
-## 📄 License
-
-This project is provided for educational purposes.
-
-## 🔗 Resources
-
-- [Rust FFI Guide](https://doc.rust-lang.org/nomicon/ffi.html)
-- [Axum Web Framework](https://github.com/tokio-rs/axum)
-- [cc Crate Documentation](https://docs.rs/cc/)
-- [Recommendation Systems Basics](https://en.wikipedia.org/wiki/Recommender_system)
+1.  Mastering **FFI Boundaries**: Understanding `unsafe` and pointer safety.
+2.  **Build System Integration**: Configuring `build.rs` for hybrid builds.
+3.  **Performance Optimization**: Reducing memory allocation in hot loops.
+4.  **Full-stack System Design**: Connecting low-level engines to modern UIs.
 
 ---
-
-**Happy Learning!** 🎓
+**Mini-RecSys** - Built with ❤️ for systems programming enthusiasts.
