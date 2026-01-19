@@ -29,6 +29,22 @@ pub struct Item {
     pub popularity: f32,
 }
 
+impl Item {
+    /// 创建测试用的简化 Item (仅用于单元测试)
+    #[cfg(test)]
+    pub fn new(id: u64, name: impl Into<String>, embedding: Vec<f32>) -> Self {
+        Self {
+            id,
+            name: name.into(),
+            category: "Test".to_string(),
+            image_url: String::new(),
+            price: 0.0,
+            embedding,
+            popularity: 0.5,
+        }
+    }
+}
+
 pub struct AppState {
     pub users: Vec<User>,
     pub items: Vec<Item>,

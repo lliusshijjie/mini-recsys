@@ -20,6 +20,7 @@ fn main() {
         .flag_if_supported("/std:c++17")    // MSVC
         // 添加头文件搜索路径
         .include("cpp")
+        .include("cpp/hnswlib")
         // 指定要编译的 C++ 源文件
         .file("cpp/vector_ops.cpp")
         // 编译并生成静态库，名称为 "vector_ops"

@@ -1,11 +1,12 @@
 # Mini-RecSys: Hybrid Rust/C++ Recommendation System
 
-A high-performance, full-stack recommendation system demo featuring a **Rust** web server, a **C++** calculation engine, and a **Vite/React** frontend. This project demonstrates practical FFI (Foreign Function Interface) usage and modern system architecture.
+A high-performance, full-stack recommendation system demo featuring a **Rust** web server, an **HNSW-powered (C++)** calculation engine, and a **Vite/React** frontend. This project demonstrates practical FFI (Foreign Function Interface) usage and modern system architecture.
 
 ## 🌟 Key Features
 
 -   **Hybrid Architecture**: Combines Rust's safety and concurrency with C++'s low-level performance.
--   **Advanced FFI**: Optimized memory interaction for vector operations (Zero-copy views where possible).
+-   **HNSW Vector Search**: High-performance approximate nearest neighbor search powered by [hnswlib](https://github.com/nmslib/hnswlib).
+-   **Advanced FFI**: Optimized memory interaction for vector operations with zero-copy views for adds and searches.
 -   **Refined Scoring**: Multi-stage ranking combining C++ vector similarity (Recall) with business logic (Popularity weighting).
 -   **Smart Data Generation**: Category-based embedding system with L2 normalization and spatial noise.
 -   **Modern Web Stack**: Full-stack integration with Axum (Backend) and Vite (Frontend).
@@ -15,22 +16,22 @@ A high-performance, full-stack recommendation system demo featuring a **Rust** w
 ```mermaid
 graph TD
     A[Frontend: Vite/React] -->|REST API| B[Backend: Rust/Axum]
-    B -->|FFI Call| C[Core: C++/Vector Search]
+    B -->|FFI Call| C[Core: C++/HNSW Index]
     B -->|Load| D[Data: JSON/Embeddings]
     C -->|Top-K Result| B
 ```
 
 ### Component Breakdown
 
-1.  **C++ Calculation Core (`cpp/`)**:
-    -   Implements high-performance `search_top_k` using `std::partial_sort`.
-    -   Handles flat-matrix memory layout for cache-friendly vector operations.
+1.  **C++ HNSW Engine (`cpp/`)**:
+    -   Uses **hnswlib** for efficient sub-linear time vector search.
+    -   Implements `hnsw_init`, `hnsw_add_item`, and `hnsw_search_knn` with thread-safety.
 2.  **Rust FFI Layer (`src/ffi.rs`)**:
-    -   Exposes safe wrappers for C++ functions.
-    -   Manages memory alignment and pointer safety during cross-boundary calls.
+    -   Safe Rust wrappers for the C++ HNSW engine.
+    -   Handles complex interaction protocols and provides `HnswConfig`.
 3.  **Rust Web Service (`src/main.rs`, `src/service.rs`)**:
     -   Asynchronous API endpoints powered by **Tokio** and **Axum**.
-    -   Implements the "Recall -> Rank" pipeline.
+    -   Initializes the index on startup and manages the recall pipeline.
 4.  **Frontend (`frontend/`)**:
     -   Modern UI for visualizing recommendations and user switching.
 
@@ -39,7 +40,7 @@ graph TD
 ### Prerequisites
 
 -   **Rust**: 1.75+ (Edition 2021)
--   **C++ Compiler**: GCC 9+, Clang 10+, or MSVC 2019+
+-   **C++ Compiler**: GCC 9+, Clang 10+, or MSVC 2019+ (Support for C++17)
 -   **Node.js**: 18+ (for frontend)
 
 ### Installation & Run
@@ -61,8 +62,14 @@ graph TD
 
 ## 📊 Technical Deep Dive
 
-### 1. Memory Interaction Protocol
-The project uses a "Flattened Matrix" layout. All item embeddings are merged into a single contiguous `Vec<f32>` before being passed to C++. This allows C++ to iterate through data with minimal cache misses.
+### 1. Approximate Nearest Neighbor Search (HNSW)
+The system has transitioned from brute-force search to **HNSW (Hierarchical Navigable Small World)**. This allows for extremely fast searches even with millions of items by navigating a layered graph of embeddings.
+
+| Parameter | Recommended | Description |
+| :--- | :--- | :--- |
+| `M` | `16` | Max connections per node (accuracy vs memory) |
+| `ef_construction` | `200` | Search depth during index build |
+| `ef_search` | `100` | Search depth during query |
 
 ### 2. Embedding System
 Unlike random initialization, our system generates embeddings based on orthogonal category anchors (Electronics, Books, Home, Clothing).
@@ -74,21 +81,21 @@ Unlike random initialization, our system generates embeddings based on orthogona
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
 | `GET` | `/users` | List all available demo users |
-| `GET` | `/recommend?uid={id}` | Get Top-10 personalized recommendations |
+| `GET` | `/recommend?uid={id}` | Get Top-10 personalized recommendations (HNSW Recall) |
 | `GET` | `/health` | Server health check |
 
 ## 📦 Core Dependencies
 
+-   `hnswlib`: Header-only C++ library for ANN search.
 -   `axum` & `tokio`: High-performance async web framework.
 -   `serde`: Robust serialization for JSON data.
 -   `cc`: Integrated build-time C++ compilation.
 -   `tower-http`: Middleware for CORS and security.
--   `libc`: Native system types for FFI.
 
 ## 💡 Learning Objectives
 1.  Mastering **FFI Boundaries**: Understanding `unsafe` and pointer safety.
-2.  **Build System Integration**: Configuring `build.rs` for hybrid builds.
-3.  **Performance Optimization**: Reducing memory allocation in hot loops.
+2.  **Vector Databases**: Implementing the core logic found in systems like Pinecone or Milvus.
+3.  **HNSW Algorithm**: Tuning parameters for speed vs precision trade-offs.
 4.  **Full-stack System Design**: Connecting low-level engines to modern UIs.
 
 ---
