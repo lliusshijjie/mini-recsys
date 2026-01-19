@@ -1,9 +1,3 @@
-// vector_ops.h - C++ 头文件
-// 定义对外暴露的 C ABI 兼容接口
-//
-// 注意：使用 extern "C" 确保函数名不会被 C++ 名称修饰 (name mangling)，
-// 这样 Rust 才能通过 FFI 正确找到并调用这些函数。
-
 #ifndef VECTOR_OPS_H
 #define VECTOR_OPS_H
 
@@ -11,27 +5,33 @@
 extern "C" {
 #endif
 
-/// 简单的加法函数 - 用于验证 FFI 流程
-/// @param a 第一个整数
-/// @param b 第二个整数
-/// @return a + b 的结果
 int cpp_add(int a, int b);
 
-/// 计算两个向量的点积 (内积)
-/// 
-/// 内存布局说明：
-/// - vec_a 和 vec_b 是由 Rust 分配的连续内存块
-/// - len 表示向量的元素个数
-/// - C++ 端仅读取数据，不修改也不释放内存
-///
-/// @param vec_a 第一个向量的首地址 (只读)
-/// @param vec_b 第二个向量的首地址 (只读)
-/// @param len 向量长度
-/// @return 点积结果
 float dot_product(const float* vec_a, const float* vec_b, int len);
+
+/// 搜索与 query_vec 相似度最高的 Top K 个 Item
+/// @param query_vec     查询向量 (长度为 cols)
+/// @param item_matrix   扁平化的 Item 矩阵 (rows * cols)
+/// @param item_ids      Item ID 数组 (长度为 rows)
+/// @param rows          矩阵行数 (Item 数量)
+/// @param cols          矩阵列数 (向量维度)
+/// @param k             返回的 Top K 数量
+/// @param out_ids       输出: Top K 的 Item ID (调用方分配, 长度 >= k)
+/// @param out_scores    输出: Top K 的相似度分数 (调用方分配, 长度 >= k)
+/// @return              实际返回的数量 (min(k, rows))
+int search_top_k(
+    const float* query_vec,
+    const float* item_matrix,
+    const int* item_ids,
+    int rows,
+    int cols,
+    int k,
+    int* out_ids,
+    float* out_scores
+);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // VECTOR_OPS_H
+#endif
