@@ -1,0 +1,702 @@
+[
+    {
+        "id": 1,
+        "title": "罗技 MX Master 3S 鼠标",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=MX+Master+3S+鼠标",
+        "price": 99.99
+    },
+    {
+        "id": 2,
+        "title": "HHKB 静电容键盘",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=HHKB+键盘",
+        "price": 320.00
+    },
+    {
+        "id": 3,
+        "title": "索尼 WH-1000XM5 耳机",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=索尼+降噪耳机",
+        "price": 349.99
+    },
+    {
+        "id": 4,
+        "title": "树莓派 5 开发板",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=树莓派+5",
+        "price": 80.00
+    },
+    {
+        "id": 5,
+        "title": "Steam Deck OLED 掌机",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=Steam+Deck",
+        "price": 549.00
+    },
+    {
+        "id": 6,
+        "title": "超大号机械键盘鼠标垫",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=XXL+鼠标垫",
+        "price": 39.99
+    },
+    {
+        "id": 7,
+        "title": "USB-C 十合一扩展坞",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=USB-C+扩展坞",
+        "price": 79.99
+    },
+    {
+        "id": 8,
+        "title": "苹果妙控触控板",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=妙控触控板",
+        "price": 129.00
+    },
+    {
+        "id": 9,
+        "title": "Keychron Q1 Pro 机械键盘",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=Keychron+键盘",
+        "price": 199.00
+    },
+    {
+        "id": 10,
+        "title": "Elgato Stream Deck 直播控制器",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=Stream+Deck",
+        "price": 149.99
+    },
+    {
+        "id": 11,
+        "title": "三星 T7 移动固态硬盘 2TB",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=三星+SSD",
+        "price": 179.99
+    },
+    {
+        "id": 12,
+        "title": "CalDigit TS4 雷电扩展坞",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=雷电扩展坞",
+        "price": 399.00
+    },
+    {
+        "id": 13,
+        "title": "AirPods Pro 2 无线耳机",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=AirPods+Pro",
+        "price": 249.00
+    },
+    {
+        "id": 14,
+        "title": "罗技 C920 高清摄像头",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=C920+摄像头",
+        "price": 69.99
+    },
+    {
+        "id": 15,
+        "title": "Blue Yeti 电容麦克风",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=Blue+Yeti+麦克风",
+        "price": 129.99
+    },
+    {
+        "id": 16,
+        "title": "任天堂 Switch OLED 游戏机",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=Switch+OLED",
+        "price": 349.99
+    },
+    {
+        "id": 17,
+        "title": "Arduino 入门套件",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=Arduino+套件",
+        "price": 79.99
+    },
+    {
+        "id": 18,
+        "title": "ESP32 开发板",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=ESP32+开发板",
+        "price": 12.99
+    },
+    {
+        "id": 19,
+        "title": "USB 示波器",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=USB+示波器",
+        "price": 199.00
+    },
+    {
+        "id": 20,
+        "title": "电烙铁焊接套装",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=焊接套装",
+        "price": 89.99
+    },
+    {
+        "id": 21,
+        "title": "Framework 模块化笔记本 16",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=Framework+笔记本",
+        "price": 1399.00
+    },
+    {
+        "id": 22,
+        "title": "LG 27寸 4K 显示器",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=LG+4K+显示器",
+        "price": 799.99
+    },
+    {
+        "id": 23,
+        "title": "Anker 大容量移动电源",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=Anker+移动电源",
+        "price": 149.99
+    },
+    {
+        "id": 24,
+        "title": "Flipper Zero 多功能工具",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=Flipper+Zero",
+        "price": 169.00
+    },
+    {
+        "id": 25,
+        "title": "Remarkable 2 电子墨水平板",
+        "category": "Electronics",
+        "image_url": "https://placehold.co/400x300?text=墨水屏平板",
+        "price": 299.00
+    },
+    {
+        "id": 26,
+        "title": "Rust 程序设计语言",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=Rust+圣经",
+        "price": 39.99
+    },
+    {
+        "id": 27,
+        "title": "Rust 编程之道",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=Rust+编程之道",
+        "price": 59.99
+    },
+    {
+        "id": 28,
+        "title": "Effective C++ 中文版",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=Effective+C%2B%2B",
+        "price": 49.99
+    },
+    {
+        "id": 29,
+        "title": "设计模式：可复用面向对象软件的基础",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=设计模式+GoF",
+        "price": 54.99
+    },
+    {
+        "id": 30,
+        "title": "计算机程序的构造和解释 SICP",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=SICP",
+        "price": 45.00
+    },
+    {
+        "id": 31,
+        "title": "代码整洁之道",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=代码整洁之道",
+        "price": 42.99
+    },
+    {
+        "id": 32,
+        "title": "计算机程序设计艺术 TAOCP",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=TAOCP",
+        "price": 199.99
+    },
+    {
+        "id": 33,
+        "title": "算法导论 第三版",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=算法导论+CLRS",
+        "price": 89.99
+    },
+    {
+        "id": 34,
+        "title": "深入理解计算机系统 CSAPP",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=CSAPP",
+        "price": 139.99
+    },
+    {
+        "id": 35,
+        "title": "操作系统导论 OSTEP",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=OSTEP",
+        "price": 49.99
+    },
+    {
+        "id": 36,
+        "title": "程序员修炼之道",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=程序员修炼之道",
+        "price": 49.99
+    },
+    {
+        "id": 37,
+        "title": "重构：改善既有代码的设计",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=重构",
+        "price": 47.99
+    },
+    {
+        "id": 38,
+        "title": "领域驱动设计",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=DDD+领域驱动",
+        "price": 59.99
+    },
+    {
+        "id": 39,
+        "title": "数据密集型应用系统设计 DDIA",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=DDIA",
+        "price": 44.99
+    },
+    {
+        "id": 40,
+        "title": "性能之巅",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=性能之巅",
+        "price": 59.99
+    },
+    {
+        "id": 41,
+        "title": "数据库系统内幕",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=数据库内幕",
+        "price": 49.99
+    },
+    {
+        "id": 42,
+        "title": "手写解释器",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=手写解释器",
+        "price": 59.99
+    },
+    {
+        "id": 43,
+        "title": "Linux/UNIX 系统编程手册",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=TLPI",
+        "price": 79.99
+    },
+    {
+        "id": 44,
+        "title": "TCP/IP 详解 卷一",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=TCP+IP+详解",
+        "price": 69.99
+    },
+    {
+        "id": 45,
+        "title": "编译原理 龙书",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=编译原理+龙书",
+        "price": 149.99
+    },
+    {
+        "id": 46,
+        "title": "计算机网络：自顶向下方法",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=计算机网络",
+        "price": 89.99
+    },
+    {
+        "id": 47,
+        "title": "现代操作系统",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=现代操作系统",
+        "price": 119.99
+    },
+    {
+        "id": 48,
+        "title": "Rust 进阶之路",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=Rust+进阶",
+        "price": 44.99
+    },
+    {
+        "id": 49,
+        "title": "Rust Web 开发实战",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=Rust+Web",
+        "price": 49.99
+    },
+    {
+        "id": 50,
+        "title": "Rust 异步编程",
+        "category": "Books",
+        "image_url": "https://placehold.co/400x300?text=Rust+异步",
+        "price": 39.99
+    },
+    {
+        "id": 51,
+        "title": "电动升降桌",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=升降桌",
+        "price": 599.00
+    },
+    {
+        "id": 52,
+        "title": "Herman Miller Aeron 人体工学椅",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=Aeron+人体工学椅",
+        "price": 1395.00
+    },
+    {
+        "id": 53,
+        "title": "LED 台灯 带USB充电",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=LED+台灯",
+        "price": 49.99
+    },
+    {
+        "id": 54,
+        "title": "桌面理线器套装",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=理线器套装",
+        "price": 29.99
+    },
+    {
+        "id": 55,
+        "title": "显示器支架臂",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=显示器支架",
+        "price": 89.00
+    },
+    {
+        "id": 56,
+        "title": "Rust 螃蟹 Ferris 玩偶",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=Ferris+玩偶",
+        "price": 24.99
+    },
+    {
+        "id": 57,
+        "title": "电竞椅",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=电竞椅",
+        "price": 499.00
+    },
+    {
+        "id": 58,
+        "title": "吸音棉隔音板",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=吸音棉",
+        "price": 39.99
+    },
+    {
+        "id": 59,
+        "title": "无线充电板",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=无线充电板",
+        "price": 29.99
+    },
+    {
+        "id": 60,
+        "title": "桌面收纳盒套装",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=收纳盒",
+        "price": 34.99
+    },
+    {
+        "id": 61,
+        "title": "Nanoleaf 智能灯板",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=智能灯板",
+        "price": 199.99
+    },
+    {
+        "id": 62,
+        "title": "智能插排",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=智能插排",
+        "price": 39.99
+    },
+    {
+        "id": 63,
+        "title": "人体工学脚踏",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=脚踏",
+        "price": 49.99
+    },
+    {
+        "id": 64,
+        "title": "白板 120x90cm",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=白板",
+        "price": 89.99
+    },
+    {
+        "id": 65,
+        "title": "迷你服务器机柜",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=服务器机柜",
+        "price": 149.00
+    },
+    {
+        "id": 66,
+        "title": "UPS 不间断电源",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=UPS+电源",
+        "price": 179.99
+    },
+    {
+        "id": 67,
+        "title": "键盘手腕托",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=手腕托",
+        "price": 19.99
+    },
+    {
+        "id": 68,
+        "title": "防窥屏",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=防窥屏",
+        "price": 49.99
+    },
+    {
+        "id": 69,
+        "title": "空气净化器",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=空气净化器",
+        "price": 199.99
+    },
+    {
+        "id": 70,
+        "title": "皮质桌垫",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=皮质桌垫",
+        "price": 39.99
+    },
+    {
+        "id": 71,
+        "title": "屏幕挂灯",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=屏幕挂灯",
+        "price": 59.99
+    },
+    {
+        "id": 72,
+        "title": "五层书架",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=书架",
+        "price": 79.99
+    },
+    {
+        "id": 73,
+        "title": "绿植盆栽套装",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=绿植盆栽",
+        "price": 24.99
+    },
+    {
+        "id": 74,
+        "title": "数字时钟",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=数字时钟",
+        "price": 29.99
+    },
+    {
+        "id": 75,
+        "title": "实木耳机架",
+        "category": "Home",
+        "image_url": "https://placehold.co/400x300?text=耳机架",
+        "price": 34.99
+    },
+    {
+        "id": 76,
+        "title": "我爱 Rust T恤",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=Rust+T恤",
+        "price": 25.00
+    },
+    {
+        "id": 77,
+        "title": "Linux 企鹅卫衣",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=Linux+卫衣",
+        "price": 55.00
+    },
+    {
+        "id": 78,
+        "title": "Git Commit 极客袜子",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=Git+袜子",
+        "price": 15.00
+    },
+    {
+        "id": 79,
+        "title": "Vim vs Emacs 棒球帽",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=编辑器大战帽",
+        "price": 22.00
+    },
+    {
+        "id": 80,
+        "title": "二进制代码围巾",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=二进制围巾",
+        "price": 35.00
+    },
+    {
+        "id": 81,
+        "title": "404 未找到 T恤",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=404+T恤",
+        "price": 24.99
+    },
+    {
+        "id": 82,
+        "title": "127.0.0.1 程序员T恤",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=localhost+T恤",
+        "price": 25.00
+    },
+    {
+        "id": 83,
+        "title": "Stack Overflow 开发者卫衣",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=SO+卫衣",
+        "price": 59.99
+    },
+    {
+        "id": 84,
+        "title": "GitHub 章鱼猫 T恤",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=GitHub+T恤",
+        "price": 28.00
+    },
+    {
+        "id": 85,
+        "title": "Kubernetes 鸭舌帽",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=K8s+帽子",
+        "price": 24.99
+    },
+    {
+        "id": 86,
+        "title": "Docker 鲸鱼毛线帽",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=Docker+毛线帽",
+        "price": 19.99
+    },
+    {
+        "id": 87,
+        "title": "AWS 云服务夹克",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=AWS+夹克",
+        "price": 89.99
+    },
+    {
+        "id": 88,
+        "title": "Python 蛇形皮带",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=Python+皮带",
+        "price": 29.99
+    },
+    {
+        "id": 89,
+        "title": "JavaScript 黄色 T恤",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=JS+T恤",
+        "price": 24.99
+    },
+    {
+        "id": 90,
+        "title": "Go 地鼠 Polo衫",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=Go+Polo",
+        "price": 39.99
+    },
+    {
+        "id": 91,
+        "title": "C++ 模板元编程 T恤",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=C%2B%2B+T恤",
+        "price": 27.99
+    },
+    {
+        "id": 92,
+        "title": "Haskell Lambda 开衫",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=Haskell+开衫",
+        "price": 69.99
+    },
+    {
+        "id": 93,
+        "title": "SQL 查询背带裤",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=SQL+背带裤",
+        "price": 34.99
+    },
+    {
+        "id": 94,
+        "title": "机器学习神经网络领带",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=ML+领带",
+        "price": 29.99
+    },
+    {
+        "id": 95,
+        "title": "开源贡献者工牌挂绳",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=开源挂绳",
+        "price": 9.99
+    },
+    {
+        "id": 96,
+        "title": "正则表达式手套",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=正则手套",
+        "price": 19.99
+    },
+    {
+        "id": 97,
+        "title": "终端绿字睡衣",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=终端睡衣",
+        "price": 44.99
+    },
+    {
+        "id": 98,
+        "title": "Debug 小黄鸭",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=Debug+小黄鸭",
+        "price": 9.99
+    },
+    {
+        "id": 99,
+        "title": "分号幸存者 T恤",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=分号+T恤",
+        "price": 24.99
+    },
+    {
+        "id": 100,
+        "title": "无限循环围巾",
+        "category": "Clothing",
+        "image_url": "https://placehold.co/400x300?text=无限循环围巾",
+        "price": 39.99
+    }
+]

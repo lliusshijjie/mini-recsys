@@ -13,7 +13,7 @@ use axum::{
 use model::{init_data, AppState};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tower_http::cors::{CorsLayer, Any};
+use tower_http::cors::CorsLayer;
 use axum::http::{Method, HeaderValue};
 
 #[derive(Deserialize)]
@@ -25,14 +25,23 @@ struct RecommendQuery {
 struct RecommendItem {
     item_id: u64,
     name: String,
+    category: String,
+    image_url: String,
+    price: f32,
     sim_score: f32,
     popularity: f32,
     final_score: f32,
 }
 
 #[derive(Serialize)]
+struct UserInfo {
+    id: u64,
+    name: String,
+}
+
+#[derive(Serialize)]
 struct RecommendResponse {
-    user_id: u64,
+    user: UserInfo,
     recommendations: Vec<RecommendItem>,
 }
 
@@ -41,11 +50,15 @@ struct ErrorResponse {
     error: String,
 }
 
+#[derive(Serialize)]
+struct UsersResponse {
+    users: Vec<UserInfo>,
+}
+
 async fn recommend_handler(
     State(state): State<Arc<AppState>>,
     Query(params): Query<RecommendQuery>,
 ) -> Result<Json<RecommendResponse>, (StatusCode, Json<ErrorResponse>)> {
-    // Step 1: 查找用户
     let user = state.users.iter()
         .find(|u| u.id == params.uid)
         .ok_or_else(|| {
@@ -54,10 +67,8 @@ async fn recommend_handler(
             }))
         })?;
 
-    // Step 2: 调用 FFI 获取 Top-50 候选项
     let candidates = ffi::recommend_recall(&user.embedding, &state.items, 50);
 
-    // Step 3: 重排序 FinalScore = SimScore * 0.7 + Popularity * 0.3
     let mut recommendations: Vec<RecommendItem> = candidates.into_iter()
         .filter_map(|(item_id, sim_score)| {
             let idx = *state.item_map.get(&item_id)?;
@@ -66,6 +77,9 @@ async fn recommend_handler(
             Some(RecommendItem {
                 item_id,
                 name: item.name.clone(),
+                category: item.category.clone(),
+                image_url: item.image_url.clone(),
+                price: item.price,
                 sim_score,
                 popularity: item.popularity,
                 final_score,
@@ -73,16 +87,20 @@ async fn recommend_handler(
         })
         .collect();
 
-    // 按 final_score 降序排序
     recommendations.sort_by(|a, b| b.final_score.partial_cmp(&a.final_score).unwrap());
-
-    // Step 4: 返回 Top 10
     recommendations.truncate(10);
 
     Ok(Json(RecommendResponse {
-        user_id: user.id,
+        user: UserInfo { id: user.id, name: user.name.clone() },
         recommendations,
     }))
+}
+
+async fn users_handler(State(state): State<Arc<AppState>>) -> Json<UsersResponse> {
+    let users = state.users.iter()
+        .map(|u| UserInfo { id: u.id, name: u.name.clone() })
+        .collect();
+    Json(UsersResponse { users })
 }
 
 async fn health_handler() -> &'static str {
@@ -94,7 +112,7 @@ async fn main() {
     println!("🚀 Initializing Mini-RecSys...");
 
     let state = init_data();
-    println!("� Loaded {} users, {} items", state.users.len(), state.items.len());
+    println!("📊 Loaded {} users, {} items", state.users.len(), state.items.len());
 
     let cors = CorsLayer::new()
         .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap())
@@ -103,13 +121,13 @@ async fn main() {
 
     let app = Router::new()
         .route("/health", get(health_handler))
+        .route("/users", get(users_handler))
         .route("/recommend", get(recommend_handler))
         .layer(cors)
         .with_state(state);
 
     let addr = "0.0.0.0:3000";
     println!("🌐 Server running at http://{}", addr);
-    println!("📝 Try: http://localhost:3000/recommend?uid=1");
 
     let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app).await.unwrap();
