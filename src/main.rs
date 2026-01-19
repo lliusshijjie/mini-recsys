@@ -13,6 +13,8 @@ use axum::{
 use model::{init_data, AppState};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tower_http::cors::{CorsLayer, Any};
+use axum::http::{Method, HeaderValue};
 
 #[derive(Deserialize)]
 struct RecommendQuery {
@@ -94,9 +96,15 @@ async fn main() {
     let state = init_data();
     println!("� Loaded {} users, {} items", state.users.len(), state.items.len());
 
+    let cors = CorsLayer::new()
+        .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap())
+        .allow_methods([Method::GET, Method::POST])
+        .allow_headers([axum::http::header::CONTENT_TYPE]);
+
     let app = Router::new()
         .route("/health", get(health_handler))
         .route("/recommend", get(recommend_handler))
+        .layer(cors)
         .with_state(state);
 
     let addr = "0.0.0.0:3000";

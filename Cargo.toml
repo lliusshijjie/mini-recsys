@@ -16,6 +16,8 @@ serde_json = "1.0"
 libc = "0.2"
 # Random - 随机数生成
 rand = "0.8"
+# HTTP middleware - CORS 支持
+tower-http = { version = "0.5", features = ["cors"] }
 
 [build-dependencies]
 # C/C++ 编译支持 - 用于编译 C++ 代码并链接到 Rust
