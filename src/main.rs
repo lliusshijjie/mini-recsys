@@ -3,47 +3,106 @@
 mod ffi;
 mod model;
 
-use model::init_data;
+use axum::{
+    extract::{Query, State},
+    http::StatusCode,
+    response::Json,
+    routing::get,
+    Router,
+};
+use model::{init_data, AppState};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-fn main() {
-    println!("=== Mini-RecSys: Rust/C++ FFI Demo ===\n");
+#[derive(Deserialize)]
+struct RecommendQuery {
+    uid: u64,
+}
 
-    // 初始化应用状态（Arc<AppState>）
-    // Arc 提供线程安全的只读共享：
-    // - 数据在初始化后不再修改，所以只需要读取权限
-    // - Arc 通过原子计数实现共享所有权，多个线程可同时持有引用
-    // - 不需要 Mutex：Mutex 用于保护可变数据的互斥访问
-    //   而这里的数据是只读的，多个线程并发读取完全安全
+#[derive(Serialize)]
+struct RecommendItem {
+    item_id: u64,
+    name: String,
+    sim_score: f32,
+    popularity: f32,
+    final_score: f32,
+}
+
+#[derive(Serialize)]
+struct RecommendResponse {
+    user_id: u64,
+    recommendations: Vec<RecommendItem>,
+}
+
+#[derive(Serialize)]
+struct ErrorResponse {
+    error: String,
+}
+
+async fn recommend_handler(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<RecommendQuery>,
+) -> Result<Json<RecommendResponse>, (StatusCode, Json<ErrorResponse>)> {
+    // Step 1: 查找用户
+    let user = state.users.iter()
+        .find(|u| u.id == params.uid)
+        .ok_or_else(|| {
+            (StatusCode::NOT_FOUND, Json(ErrorResponse {
+                error: format!("User {} not found", params.uid),
+            }))
+        })?;
+
+    // Step 2: 调用 FFI 获取 Top-50 候选项
+    let candidates = ffi::recommend_recall(&user.embedding, &state.items, 50);
+
+    // Step 3: 重排序 FinalScore = SimScore * 0.7 + Popularity * 0.3
+    let mut recommendations: Vec<RecommendItem> = candidates.into_iter()
+        .filter_map(|(item_id, sim_score)| {
+            let idx = *state.item_map.get(&item_id)?;
+            let item = &state.items[idx];
+            let final_score = sim_score * 0.7 + item.popularity * 0.3;
+            Some(RecommendItem {
+                item_id,
+                name: item.name.clone(),
+                sim_score,
+                popularity: item.popularity,
+                final_score,
+            })
+        })
+        .collect();
+
+    // 按 final_score 降序排序
+    recommendations.sort_by(|a, b| b.final_score.partial_cmp(&a.final_score).unwrap());
+
+    // Step 4: 返回 Top 10
+    recommendations.truncate(10);
+
+    Ok(Json(RecommendResponse {
+        user_id: user.id,
+        recommendations,
+    }))
+}
+
+async fn health_handler() -> &'static str {
+    "OK"
+}
+
+#[tokio::main]
+async fn main() {
+    println!("🚀 Initializing Mini-RecSys...");
+
     let state = init_data();
-    
-    println!("📊 数据初始化完成:");
-    println!("   用户数: {}", state.users.len());
-    println!("   物品数: {}", state.items.len());
-    println!("   向量维度: {}\n", state.users[0].embedding.len());
+    println!("� Loaded {} users, {} items", state.users.len(), state.items.len());
 
-    // 测试 1: FFI 加法
-    println!("📝 测试 1: C++ 加法函数");
-    let sum = ffi::add(42, 58);
-    println!("   42 + 58 = {}", sum);
-    println!("   ✅ FFI 调用成功!\n");
+    let app = Router::new()
+        .route("/health", get(health_handler))
+        .route("/recommend", get(recommend_handler))
+        .with_state(state);
 
-    // 测试 2: 召回测试
-    println!("📝 测试 2: 推荐召回");
-    let user = &state.users[0];
-    let results = ffi::recommend_recall(&user.embedding, &state.items, 5);
-    
-    println!("   用户 {} 的 Top 5 推荐:", user.id);
-    for (item_id, score) in &results {
-        println!("   - Item {}: score = {:.4}", item_id, score);
-    }
-    println!("   ✅ 召回成功!\n");
+    let addr = "0.0.0.0:3000";
+    println!("🌐 Server running at http://{}", addr);
+    println!("📝 Try: http://localhost:3000/recommend?uid=1");
 
-    // 演示 Arc 的多线程共享能力
-    let state_clone = Arc::clone(&state);
-    println!("📝 Arc 引用计数: {}", Arc::strong_count(&state));
-    drop(state_clone);
-    println!("   drop 后计数: {}\n", Arc::strong_count(&state));
-
-    println!("=== 阶段 3 完成 ===");
+    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
