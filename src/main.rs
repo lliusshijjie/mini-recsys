@@ -3,6 +3,7 @@
 //! 这是程序的入口点，演示了 Rust 调用 C++ 函数的基本流程。
 
 mod ffi;
+mod model;
 
 fn main() {
     println!("=== Mini-RecSys: Rust/C++ FFI Demo ===\n");
