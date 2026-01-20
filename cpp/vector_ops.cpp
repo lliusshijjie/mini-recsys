@@ -167,6 +167,55 @@ extern "C" int hnsw_get_count() {
     return static_cast<int>(g_hnsw_index->getCurrentElementCount());
 }
 
+extern "C" int hnsw_save_index(const char* path) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    
+    if (g_hnsw_index == nullptr) {
+        return -1;  // 索引未初始化
+    }
+    
+    try {
+        g_hnsw_index->saveIndex(std::string(path));
+        return 0;
+    } catch (...) {
+        return -1;
+    }
+}
+
+extern "C" int hnsw_load_index(const char* path, int dim, int max_elements) {
+    std::lock_guard<std::mutex> lock(g_mutex);
+    
+    // 清理旧索引
+    if (g_hnsw_index != nullptr) {
+        delete g_hnsw_index;
+        g_hnsw_index = nullptr;
+    }
+    if (g_space != nullptr) {
+        delete g_space;
+        g_space = nullptr;
+    }
+    
+    try {
+        g_dim = dim;
+        g_space = new hnswlib::InnerProductSpace(dim);
+        
+        // 尝试从文件加载
+        FILE* f = fopen(path, "rb");
+        if (f != nullptr) {
+            fclose(f);
+            // 文件存在，加载索引
+            g_hnsw_index = new hnswlib::HierarchicalNSW<float>(g_space, std::string(path));
+            return 0;  // 成功加载
+        } else {
+            // 文件不存在，创建新索引
+            g_hnsw_index = new hnswlib::HierarchicalNSW<float>(g_space, max_elements, 16, 200);
+            return 1;  // 创建了新索引
+        }
+    } catch (...) {
+        return -1;  // 失败
+    }
+}
+
 // ============================================================================
 // 旧版暴力搜索 (Legacy Brute-force Search)
 // ============================================================================

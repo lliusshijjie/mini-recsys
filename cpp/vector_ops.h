@@ -55,6 +55,18 @@ void hnsw_destroy();
 /// 获取索引中的元素数量
 int hnsw_get_count();
 
+/// 保存索引到文件
+/// @param path  保存路径
+/// @return      0 成功, -1 失败
+int hnsw_save_index(const char* path);
+
+/// 从文件加载索引 (若文件不存在则创建新索引)
+/// @param path          索引文件路径
+/// @param dim           向量维度
+/// @param max_elements  最大元素数量 (仅在创建新索引时使用)
+/// @return              0 成功加载, 1 创建了新索引, -1 失败
+int hnsw_load_index(const char* path, int dim, int max_elements);
+
 // ============================================================================
 // 旧版接口 (Legacy Interface - 保持向后兼容)
 // ============================================================================

@@ -22,6 +22,8 @@ extern "C" {
     fn hnsw_search_knn(query: *const c_float, k: c_int, out_ids: *mut c_int, out_scores: *mut c_float) -> c_int;
     fn hnsw_destroy();
     fn hnsw_get_count() -> c_int;
+    fn hnsw_save_index(path: *const libc::c_char) -> c_int;
+    fn hnsw_load_index(path: *const libc::c_char, dim: c_int, max_elements: c_int) -> c_int;
 
     // 旧版暴力搜索
     fn search_top_k(
@@ -183,6 +185,47 @@ pub fn destroy_hnsw_index() {
 pub fn get_hnsw_count() -> usize {
     // SAFETY: 无参数，返回值是基本类型
     unsafe { hnsw_get_count() as usize }
+}
+
+/// 保存索引到文件
+pub fn save_hnsw_index(path: &str) -> Result<(), String> {
+    use std::ffi::CString;
+    let c_path = CString::new(path).map_err(|_| "Invalid path".to_string())?;
+    
+    // SAFETY: c_path 是有效的以 null 结尾的 C 字符串
+    let result = unsafe { hnsw_save_index(c_path.as_ptr()) };
+    
+    if result == 0 {
+        Ok(())
+    } else {
+        Err("Failed to save HNSW index".to_string())
+    }
+}
+
+/// 加载索引 (若文件不存在则创建新索引)
+/// 返回: Ok(true) = 已加载, Ok(false) = 创建了新索引, Err = 失败
+pub fn load_hnsw_index(path: &str, dim: usize, max_elements: usize, ef_search: usize) -> Result<bool, String> {
+    use std::ffi::CString;
+    let c_path = CString::new(path).map_err(|_| "Invalid path".to_string())?;
+    
+    // SAFETY: c_path 是有效的以 null 结尾的 C 字符串
+    let result = unsafe { 
+        hnsw_load_index(c_path.as_ptr(), dim as c_int, max_elements as c_int) 
+    };
+    
+    match result {
+        0 => {
+            // 加载成功，设置 ef_search
+            unsafe { hnsw_set_ef(ef_search as c_int) };
+            Ok(true)
+        }
+        1 => {
+            // 创建了新索引
+            unsafe { hnsw_set_ef(ef_search as c_int) };
+            Ok(false)
+        }
+        _ => Err("Failed to load HNSW index".to_string()),
+    }
 }
 
 // ============================================================================

@@ -88,4 +88,11 @@ impl Storage {
     pub fn users_count(&self) -> usize {
         self.users_tree.len()
     }
+
+    /// 强制刷新数据到磁盘
+    pub fn flush(&self) -> Result<()> {
+        self.users_tree.flush().context("Failed to flush users tree")?;
+        self.items_tree.flush().context("Failed to flush items tree")?;
+        Ok(())
+    }
 }
