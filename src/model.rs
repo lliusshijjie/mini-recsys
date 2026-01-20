@@ -103,3 +103,11 @@ pub fn generate_user_embedding(categories: &[&str]) -> Vec<f32> {
     let norm: f32 = vec.iter().map(|x| x * x).sum::<f32>().sqrt();
     vec.into_iter().map(|x| x / norm).collect()
 }
+
+/// 生成完全随机的向量 (用于噪声用户)
+pub fn generate_random_embedding() -> Vec<f32> {
+    let mut rng = rand::thread_rng();
+    let vec: Vec<f32> = (0..DIM).map(|_| rng.gen::<f32>() * 2.0 - 1.0).collect();
+    let norm: f32 = vec.iter().map(|x| x * x).sum::<f32>().sqrt();
+    vec.into_iter().map(|x| x / norm).collect()
+}

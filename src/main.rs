@@ -14,7 +14,7 @@ use axum::{
 };
 use fastbloom_rs::Membership;
 use ffi::{add_item_to_hnsw, get_hnsw_count, hnsw_search, load_hnsw_index, save_hnsw_index};
-use model::{generate_category_embedding, generate_user_embedding, Item, ItemJson, User, DIM};
+use model::{generate_category_embedding, generate_user_embedding, generate_random_embedding, Item, ItemJson, User, DIM};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -197,9 +197,23 @@ async fn health_handler() -> &'static str { "OK" }
 
 fn init_users() -> Vec<User> {
     vec![
-        User { id: 1, name: "Coder (Electronics + Books)".into(), embedding: generate_user_embedding(&["Electronics", "Books"]) },
-        User { id: 2, name: "Home Maker (Home)".into(), embedding: generate_user_embedding(&["Home"]) },
-        User { id: 3, name: "Fashionista (Clothing)".into(), embedding: generate_user_embedding(&["Clothing"]) },
+        // 明确单一兴趣的用户
+        User { id: 1, name: "程序员小明 (Electronics + Books)".into(), embedding: generate_user_embedding(&["Electronics", "Books"]) },
+        User { id: 2, name: "居家达人小红 (Home)".into(), embedding: generate_user_embedding(&["Home"]) },
+        User { id: 3, name: "时尚达人小美 (Clothing)".into(), embedding: generate_user_embedding(&["Clothing"]) },
+        
+        // 双兴趣用户
+        User { id: 4, name: "极客玩家 (Electronics)".into(), embedding: generate_user_embedding(&["Electronics"]) },
+        User { id: 5, name: "书虫 (Books)".into(), embedding: generate_user_embedding(&["Books"]) },
+        User { id: 6, name: "生活家 (Home + Clothing)".into(), embedding: generate_user_embedding(&["Home", "Clothing"]) },
+        
+        // 混合兴趣用户
+        User { id: 7, name: "全能选手 (All Categories)".into(), embedding: generate_user_embedding(&["Electronics", "Books", "Home", "Clothing"]) },
+        User { id: 8, name: "科技宅 (Electronics + Home)".into(), embedding: generate_user_embedding(&["Electronics", "Home"]) },
+        
+        // 噪声用户 - 使用随机embedding
+        User { id: 9, name: "新用户A (Random)".into(), embedding: generate_random_embedding() },
+        User { id: 10, name: "新用户B (Random)".into(), embedding: generate_random_embedding() },
     ]
 }
 
