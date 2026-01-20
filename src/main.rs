@@ -1,10 +1,10 @@
 //! Mini-RecSys - 混合 Rust/C++ 推荐系统 Demo
-//!
-//! 本项目演示了 Rust 与 C++ 的 FFI 集成，使用 HNSW 算法进行高效的向量近似最近邻搜索。
 
 mod ffi;
 mod model;
+mod storage;
 
+use anyhow::Result;
 use axum::{
     extract::{Query, State},
     http::StatusCode,
@@ -13,11 +13,24 @@ use axum::{
     Router,
 };
 use ffi::{add_item_to_hnsw, hnsw_search, init_hnsw_index, HnswConfig};
-use model::{init_data, AppState};
+use model::{generate_category_embedding, generate_user_embedding, Item, ItemJson, User, DIM};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
+use storage::Storage;
 use tower_http::cors::CorsLayer;
 use axum::http::{Method, HeaderValue};
+
+// ============================================================================
+// AppState - 使用 Storage 进行持久化
+// ============================================================================
+
+pub struct AppState {
+    pub storage: Arc<Storage>,
+    pub users: Vec<User>,           // 用户数据缓存在内存
+    pub items: Vec<Item>,           // 物品数据缓存在内存（用于推荐计算）
+    pub item_map: HashMap<u64, usize>,
+}
 
 // ============================================================================
 // Request/Response 数据结构
@@ -78,15 +91,12 @@ async fn recommend_handler(
             }))
         })?;
 
-    // 使用 HNSW 索引进行高效近似最近邻搜索
-    // 召回 50 个候选物品，比暴力搜索快得多
     let candidates = hnsw_search(&user.embedding, 50);
 
     let mut recommendations: Vec<RecommendItem> = candidates.into_iter()
         .filter_map(|(item_id, sim_score)| {
             let idx = *state.item_map.get(&item_id)?;
             let item = &state.items[idx];
-            // 融合相似度分数 (70%) 和热度分数 (30%)
             let final_score = sim_score * 0.7 + item.popularity * 0.3;
             Some(RecommendItem {
                 item_id,
@@ -101,7 +111,6 @@ async fn recommend_handler(
         })
         .collect();
 
-    // 按最终分数排序并取 Top 10
     recommendations.sort_by(|a, b| b.final_score.partial_cmp(&a.final_score).unwrap());
     recommendations.truncate(10);
 
@@ -123,47 +132,115 @@ async fn health_handler() -> &'static str {
 }
 
 // ============================================================================
+// 数据初始化
+// ============================================================================
+
+fn init_users() -> Vec<User> {
+    vec![
+        User {
+            id: 1,
+            name: "Coder (Electronics + Books)".into(),
+            embedding: generate_user_embedding(&["Electronics", "Books"]),
+        },
+        User {
+            id: 2,
+            name: "Home Maker (Home)".into(),
+            embedding: generate_user_embedding(&["Home"]),
+        },
+        User {
+            id: 3,
+            name: "Fashionista (Clothing)".into(),
+            embedding: generate_user_embedding(&["Clothing"]),
+        },
+    ]
+}
+
+fn load_items_from_json() -> Result<Vec<Item>> {
+    let json_str = std::fs::read_to_string("assets/products.json")?;
+    let items_json: Vec<ItemJson> = serde_json::from_str(&json_str)?;
+    
+    let mut rng = rand::thread_rng();
+    use rand::Rng;
+    
+    let items: Vec<Item> = items_json.into_iter()
+        .map(|json| {
+            let embedding = generate_category_embedding(&json.category);
+            let popularity = rng.gen::<f32>();
+            Item::from_json(json, embedding, popularity)
+        })
+        .collect();
+    
+    Ok(items)
+}
+
+fn init_data_with_storage(storage: Arc<Storage>) -> Result<Arc<AppState>> {
+    // 检查数据库是否有数据
+    let items = if storage.items_count() == 0 {
+        println!("📂 Database is empty, loading from products.json...");
+        let items = load_items_from_json()?;
+        
+        // 写入数据库
+        for item in &items {
+            storage.save_item(item)?;
+        }
+        println!("💾 Saved {} items to database", items.len());
+        items
+    } else {
+        println!("📂 Loading items from database...");
+        let items: Vec<Item> = storage.iter_items()
+            .filter_map(|r| r.ok())
+            .collect();
+        println!("📦 Loaded {} items from database", items.len());
+        items
+    };
+
+    // 用户数据（也可以持久化，这里简化处理）
+    let users = if storage.users_count() == 0 {
+        let users = init_users();
+        for user in &users {
+            storage.save_user(user)?;
+        }
+        println!("💾 Saved {} users to database", users.len());
+        users
+    } else {
+        storage.get_all_users()?
+    };
+
+    let item_map: HashMap<u64, usize> = items.iter()
+        .enumerate()
+        .map(|(idx, item)| (item.id, idx))
+        .collect();
+
+    Ok(Arc::new(AppState {
+        storage,
+        users,
+        items,
+        item_map,
+    }))
+}
+
+// ============================================================================
 // HNSW 索引初始化
 // ============================================================================
 
-/// 初始化 HNSW 索引并灌入所有物品数据
-fn init_hnsw_with_items(state: &AppState) {
-    // HNSW 参数解释:
-    // - dim: 向量维度 (我们使用 64 维)
-    // - max_elements: 最大物品数量
-    // - M: 每个节点的最大连接数
-    //   - 更高的 M = 更好的召回率，但更多内存和更慢的构建速度
-    //   - 推荐值: 16 (平衡), 32-64 (高精度)
-    // - ef_construction: 构建时的搜索深度
-    //   - 更高 = 更好的索引质量，但更慢的构建
-    //   - 推荐值: 200
-    // - ef_search: 查询时的搜索深度
-    //   - 更高 = 更好的召回率，但更慢的查询
-    //   - 必须 >= k (返回的结果数)
-    //   - 推荐值: 50-100
+fn init_hnsw_with_items(items: &[Item]) {
     let config = HnswConfig {
-        dim: 64,                    // 向量维度
-        max_elements: state.items.len() + 1000,  // 预留一些空间
-        m: 16,                      // 节点连接数 (平衡模式)
-        ef_construction: 200,       // 构建深度
-        ef_search: 100,             // 查询深度
+        dim: DIM,
+        max_elements: items.len() + 1000,
+        m: 16,
+        ef_construction: 200,
+        ef_search: 100,
     };
 
     println!("🔧 Initializing HNSW index...");
-    println!("   - Dimension: {}", config.dim);
-    println!("   - M (connections): {}", config.m);
-    println!("   - ef_construction: {}", config.ef_construction);
-    println!("   - ef_search: {}", config.ef_search);
 
-    // 初始化索引
     if let Err(e) = init_hnsw_index(&config) {
         eprintln!("❌ Failed to initialize HNSW index: {}", e);
         return;
     }
 
-    // 将所有物品添加到索引中
     let mut success_count = 0;
-    for item in &state.items {
+    for item in items {
         if add_item_to_hnsw(item.id, &item.embedding).is_ok() {
             success_count += 1;
         }
@@ -177,24 +254,28 @@ fn init_hnsw_with_items(state: &AppState) {
 // ============================================================================
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
     println!("🚀 Initializing Mini-RecSys...\n");
 
-    // 1. 加载商品和用户数据
-    let state = init_data();
+    // 1. 初始化 Sled 存储
+    let storage = Arc::new(Storage::new("data/db")?);
+    println!("💾 Sled database opened at data/db\n");
+
+    // 2. 加载或初始化数据
+    let state = init_data_with_storage(storage)?;
     println!("📊 Loaded {} users, {} items\n", state.users.len(), state.items.len());
 
-    // 2. 初始化 HNSW 索引并灌入商品数据
-    init_hnsw_with_items(&state);
+    // 3. 初始化 HNSW 索引
+    init_hnsw_with_items(&state.items);
     println!();
 
-    // 3. 配置 CORS
+    // 4. 配置 CORS
     let cors = CorsLayer::new()
         .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap())
         .allow_methods([Method::GET, Method::POST])
         .allow_headers([axum::http::header::CONTENT_TYPE]);
 
-    // 4. 配置路由
+    // 5. 配置路由
     let app = Router::new()
         .route("/health", get(health_handler))
         .route("/users", get(users_handler))
@@ -202,13 +283,12 @@ async fn main() {
         .layer(cors)
         .with_state(state);
 
-    // 5. 启动服务器
+    // 6. 启动服务器
     let addr = "0.0.0.0:3000";
     println!("🌐 Server running at http://{}", addr);
-    println!("   - GET /health     - 健康检查");
-    println!("   - GET /users      - 获取用户列表");
-    println!("   - GET /recommend?uid=<id> - 获取推荐\n");
 
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, app).await?;
+    
+    Ok(())
 }

@@ -6,7 +6,8 @@ A high-performance, full-stack recommendation system demo featuring a **Rust** w
 
 -   **Hybrid Architecture**: Combines Rust's safety and concurrency with C++'s low-level performance.
 -   **HNSW Vector Search**: High-performance approximate nearest neighbor search powered by [hnswlib](https://github.com/nmslib/hnswlib).
--   **Advanced FFI**: Optimized memory interaction for vector operations with zero-copy views for adds and searches.
+-   **Advanced FFI**: Optimized memory interaction for vector operations with zero-copy views for index building.
+-   **Persistent Storage**: Integrated **Sled (KV Engine)** for fast, thread-safe data persistence on Windows.
 -   **Refined Scoring**: Multi-stage ranking combining C++ vector similarity (Recall) with business logic (Popularity weighting).
 -   **Smart Data Generation**: Category-based embedding system with L2 normalization and spatial noise.
 -   **Modern Web Stack**: Full-stack integration with Axum (Backend) and Vite (Frontend).
@@ -15,10 +16,10 @@ A high-performance, full-stack recommendation system demo featuring a **Rust** w
 
 ```mermaid
 graph TD
-    A[Frontend: Vite/React] -->|REST API| B[Backend: Rust/Axum]
-    B -->|FFI Call| C[Core: C++/HNSW Index]
-    B -->|Load| D[Data: JSON/Embeddings]
-    C -->|Top-K Result| B
+    A["Frontend: Vite/React"] -->|REST API| B["Backend: Rust/Axum"]
+    B -->|FFI Call| C["Core: C++/HNSW Engine"]
+    B <-->|Persistence| D["Storage: Sled (KV Store)"]
+    D -.->|Warm Up| C
 ```
 
 ### Component Breakdown
@@ -26,13 +27,16 @@ graph TD
 1.  **C++ HNSW Engine (`cpp/`)**:
     -   Uses **hnswlib** for efficient sub-linear time vector search.
     -   Implements `hnsw_init`, `hnsw_add_item`, and `hnsw_search_knn` with thread-safety.
-2.  **Rust FFI Layer (`src/ffi.rs`)**:
+2.  **Persistent Storage (`src/storage.rs`)**:
+    -   Powered by **Sled**, a high-performance embedded database.
+    -   Ensures data survives restarts and avoids redundant JSON parsing.
+3.  **Rust FFI Layer (`src/ffi.rs`)**:
     -   Safe Rust wrappers for the C++ HNSW engine.
     -   Handles complex interaction protocols and provides `HnswConfig`.
-3.  **Rust Web Service (`src/main.rs`, `src/service.rs`)**:
+4.  **Rust Web Service (`src/main.rs`, `src/model.rs`)**:
     -   Asynchronous API endpoints powered by **Tokio** and **Axum**.
-    -   Initializes the index on startup and manages the recall pipeline.
-4.  **Frontend (`frontend/`)**:
+    -   Coordinates Storage, HNSW Indexing, and the Recommendation Pipeline.
+5.  **Frontend (`frontend/`)**:
     -   Modern UI for visualizing recommendations and user switching.
 
 ## 🚀 Getting Started

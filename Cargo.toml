@@ -18,6 +18,12 @@ libc = "0.2"
 rand = "0.8"
 # HTTP middleware - CORS 支持
 tower-http = { version = "0.5", features = ["cors"] }
+# Embedded Database - Sled 纯 Rust 嵌入式数据库
+sled = "0.34"
+# Binary Serialization - 高效二进制序列化
+bincode = "1.3"
+# Error Handling - 简化错误处理
+anyhow = "1.0"
 
 [build-dependencies]
 # C/C++ 编译支持 - 用于编译 C++ 代码并链接到 Rust

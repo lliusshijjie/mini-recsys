@@ -42,3 +42,7 @@ pip-delete-this-directory.txt
 # Environment files
 .env
 .env.local
+
+# Database
+/data/
+*.db
