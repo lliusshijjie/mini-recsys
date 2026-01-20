@@ -9,9 +9,10 @@ use axum::{
     extract::{Query, State},
     http::StatusCode,
     response::Json,
-    routing::get,
+    routing::{get, post},
     Router,
 };
+use fastbloom_rs::Membership;
 use ffi::{add_item_to_hnsw, get_hnsw_count, hnsw_search, load_hnsw_index, save_hnsw_index};
 use model::{generate_category_embedding, generate_user_embedding, Item, ItemJson, User, DIM};
 use serde::{Deserialize, Serialize};
@@ -23,6 +24,7 @@ use axum::http::{Method, HeaderValue};
 
 const INDEX_PATH: &str = "data/index.bin";
 const DB_PATH: &str = "data/db";
+const MIN_RECOMMENDATIONS: usize = 5;
 
 // ============================================================================
 // AppState
@@ -58,13 +60,19 @@ struct RecommendItem {
 struct UserInfo { id: u64, name: String }
 
 #[derive(Serialize)]
-struct RecommendResponse { user: UserInfo, recommendations: Vec<RecommendItem> }
+struct RecommendResponse { user: UserInfo, recommendations: Vec<RecommendItem>, filtered_count: usize }
 
 #[derive(Serialize)]
 struct ErrorResponse { error: String }
 
 #[derive(Serialize)]
 struct UsersResponse { users: Vec<UserInfo> }
+
+#[derive(Deserialize)]
+struct MarkSeenRequest { uid: u64, item_ids: Vec<u64> }
+
+#[derive(Serialize)]
+struct MarkSeenResponse { marked: usize }
 
 // ============================================================================
 // Handlers
@@ -80,10 +88,25 @@ async fn recommend_handler(
             error: format!("User {} not found", params.uid),
         })))?;
 
-    let candidates = hnsw_search(&user.embedding, 50);
+    // Step A: 召回 Top-100
+    let candidates = hnsw_search(&user.embedding, 100);
 
+    // Step B: 获取用户的 Bloom Filter
+    let filter = state.storage.get_user_filter(params.uid)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
+            error: format!("Failed to get filter: {}", e),
+        })))?;
+
+    // Step C: 过滤已看过的商品
+    let mut filtered_count = 0;
     let mut recommendations: Vec<RecommendItem> = candidates.into_iter()
         .filter_map(|(item_id, sim_score)| {
+            // 检查是否已看过
+            if filter.contains(&item_id.to_le_bytes()) {
+                filtered_count += 1;
+                return None;
+            }
+            
             let idx = *state.item_map.get(&item_id)?;
             let item = &state.items[idx];
             let final_score = sim_score * 0.7 + item.popularity * 0.3;
@@ -101,12 +124,62 @@ async fn recommend_handler(
         .collect();
 
     recommendations.sort_by(|a, b| b.final_score.partial_cmp(&a.final_score).unwrap());
+    
+    // Step D: 降级填充 (Fallback)
+    if recommendations.len() < MIN_RECOMMENDATIONS {
+        // 从热门商品中随机补充
+        let mut popular_items: Vec<_> = state.items.iter()
+            .filter(|item| !filter.contains(&item.id.to_le_bytes()))
+            .collect();
+        popular_items.sort_by(|a, b| b.popularity.partial_cmp(&a.popularity).unwrap());
+        
+        for item in popular_items.into_iter().take(MIN_RECOMMENDATIONS - recommendations.len()) {
+            if !recommendations.iter().any(|r| r.item_id == item.id) {
+                recommendations.push(RecommendItem {
+                    item_id: item.id,
+                    name: item.name.clone(),
+                    category: item.category.clone(),
+                    image_url: item.image_url.clone(),
+                    price: item.price,
+                    sim_score: 0.0,
+                    popularity: item.popularity,
+                    final_score: item.popularity * 0.3,
+                });
+            }
+        }
+    }
+    
     recommendations.truncate(10);
 
     Ok(Json(RecommendResponse {
         user: UserInfo { id: user.id, name: user.name.clone() },
         recommendations,
+        filtered_count,
     }))
+}
+
+async fn mark_seen_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<MarkSeenRequest>,
+) -> Result<Json<MarkSeenResponse>, (StatusCode, Json<ErrorResponse>)> {
+    // 加载用户的 Filter
+    let mut filter = state.storage.get_user_filter(payload.uid)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
+            error: format!("Failed to get filter: {}", e),
+        })))?;
+    
+    // 插入所有 item_id
+    for item_id in &payload.item_ids {
+        filter.add(&item_id.to_le_bytes());
+    }
+    
+    // 保存回 Sled
+    state.storage.save_user_filter(payload.uid, &filter)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
+            error: format!("Failed to save filter: {}", e),
+        })))?;
+    
+    Ok(Json(MarkSeenResponse { marked: payload.item_ids.len() }))
 }
 
 async fn users_handler(State(state): State<Arc<AppState>>) -> Json<UsersResponse> {
@@ -179,7 +252,6 @@ fn init_data_with_storage(storage: Arc<Storage>) -> Result<Arc<AppState>> {
 fn init_hnsw_with_hydration(items: &[Item]) -> Result<()> {
     let max_elements = items.len() + 1000;
     
-    // Step A: 尝试加载索引
     println!("🔧 Loading HNSW index from {}...", INDEX_PATH);
     let loaded = load_hnsw_index(INDEX_PATH, DIM, max_elements, 100)
         .map_err(|e| anyhow::anyhow!(e))?;
@@ -188,19 +260,16 @@ fn init_hnsw_with_hydration(items: &[Item]) -> Result<()> {
     let db_count = items.len();
     
     if loaded && index_count == db_count {
-        // 索引与数据库一致
         println!("✅ HNSW index loaded: {} items (consistent with DB)", index_count);
         return Ok(());
     }
     
-    // Step B & C: 索引为空或不一致，需要重建
     if !loaded {
         println!("📝 Index file not found, created new empty index");
     } else {
         println!("⚠️  Index count ({}) != DB count ({}), rebuilding...", index_count, db_count);
     }
     
-    // 重建索引：遍历 Sled 中的所有 Items
     println!("🔄 Hydrating index from database...");
     let mut success = 0;
     for item in items {
@@ -220,13 +289,11 @@ fn init_hnsw_with_hydration(items: &[Item]) -> Result<()> {
 async fn graceful_shutdown(storage: Arc<Storage>) {
     println!("\n🛑 Shutting down...");
     
-    // 保存 HNSW 索引
     match save_hnsw_index(INDEX_PATH) {
         Ok(()) => println!("💾 HNSW index saved to {}", INDEX_PATH),
         Err(e) => eprintln!("❌ Failed to save index: {}", e),
     }
     
-    // Flush Sled 数据库
     match storage.flush() {
         Ok(()) => println!("💾 Sled database flushed"),
         Err(e) => eprintln!("❌ Failed to flush database: {}", e),
@@ -243,40 +310,35 @@ async fn graceful_shutdown(storage: Arc<Storage>) {
 async fn main() -> Result<()> {
     println!("🚀 Initializing Mini-RecSys...\n");
 
-    // 1. Sled 存储
     let storage = Arc::new(Storage::new(DB_PATH)?);
     println!("💾 Sled database opened at {}\n", DB_PATH);
 
-    // 2. 加载数据
     let state = init_data_with_storage(Arc::clone(&storage))?;
     println!("📊 Loaded {} users, {} items\n", state.users.len(), state.items.len());
 
-    // 3. HNSW 索引 (带一致性检查)
     init_hnsw_with_hydration(&state.items)?;
     println!();
 
-    // 4. CORS
     let cors = CorsLayer::new()
         .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap())
         .allow_methods([Method::GET, Method::POST])
         .allow_headers([axum::http::header::CONTENT_TYPE]);
 
-    // 5. 路由
     let app = Router::new()
         .route("/health", get(health_handler))
         .route("/users", get(users_handler))
         .route("/recommend", get(recommend_handler))
+        .route("/mark_seen", post(mark_seen_handler))
         .layer(cors)
         .with_state(Arc::clone(&state));
 
-    // 6. 启动服务器
     let addr = "0.0.0.0:3000";
     println!("🌐 Server running at http://{}", addr);
+    println!("   POST /mark_seen - 标记已看商品");
     println!("   Press Ctrl+C to shutdown gracefully\n");
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
     
-    // 使用 tokio::select! 监听信号
     let storage_for_shutdown = Arc::clone(&storage);
     tokio::select! {
         result = axum::serve(listener, app) => {

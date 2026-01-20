@@ -18,6 +18,7 @@ function App() {
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState('')
     const [responseTime, setResponseTime] = useState(null)
+    const [filteredCount, setFilteredCount] = useState(0)
 
     useEffect(() => {
         axios.get(`${API_BASE}/users`)
@@ -34,7 +35,17 @@ function App() {
             const res = await axios.get(`${API_BASE}/recommend?uid=${selectedUserId}`)
             setCurrentUser(res.data.user)
             setRecommendations(res.data.recommendations)
+            setFilteredCount(res.data.filtered_count || 0)
             setResponseTime((performance.now() - start).toFixed(0))
+
+            // 自动标记为已看
+            const itemIds = res.data.recommendations.map(r => r.item_id)
+            if (itemIds.length > 0) {
+                axios.post(`${API_BASE}/mark_seen`, {
+                    uid: selectedUserId,
+                    item_ids: itemIds
+                }).catch(() => { })
+            }
         } catch (err) {
             setError(err.response?.data?.error || err.message)
             setRecommendations([])
@@ -57,11 +68,18 @@ function App() {
                             <p className="text-xs text-slate-400">Rust + C++ FFI Recommendation Engine</p>
                         </div>
                     </div>
-                    {responseTime && (
-                        <div className="text-sm text-slate-400">
-                            Response: <span className="text-green-400 font-semibold">{responseTime}ms</span>
-                        </div>
-                    )}
+                    <div className="flex items-center gap-6">
+                        {filteredCount > 0 && (
+                            <div className="text-sm text-slate-400">
+                                Filtered: <span className="text-amber-400 font-semibold">{filteredCount}</span> seen
+                            </div>
+                        )}
+                        {responseTime && (
+                            <div className="text-sm text-slate-400">
+                                Response: <span className="text-green-400 font-semibold">{responseTime}ms</span>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </header>
 
