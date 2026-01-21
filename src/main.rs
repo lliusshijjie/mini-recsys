@@ -3,6 +3,7 @@
 mod ffi;
 mod model;
 mod storage;
+mod embedding;
 
 use anyhow::Result;
 use axum::{
@@ -35,6 +36,7 @@ pub struct AppState {
     pub users: Vec<User>,
     pub items: Vec<Item>,
     pub item_map: HashMap<u64, usize>,
+    pub embedding_model: Option<Arc<embedding::EmbeddingModel>>,
 }
 
 // ============================================================================
@@ -73,6 +75,12 @@ struct MarkSeenRequest { uid: u64, item_ids: Vec<u64> }
 
 #[derive(Serialize)]
 struct MarkSeenResponse { marked: usize }
+
+#[derive(Deserialize)]
+struct SearchQuery { q: String }
+
+#[derive(Serialize)]
+struct SearchResponse { query: String, results: Vec<RecommendItem> }
 
 // ============================================================================
 // Handlers
@@ -189,6 +197,44 @@ async fn users_handler(State(state): State<Arc<AppState>>) -> Json<UsersResponse
     Json(UsersResponse { users })
 }
 
+async fn search_handler(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<SearchQuery>,
+) -> Result<Json<SearchResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let model = state.embedding_model.as_ref()
+        .ok_or_else(|| (StatusCode::SERVICE_UNAVAILABLE, Json(ErrorResponse {
+            error: "Embedding model not loaded".to_string(),
+        })))?;
+
+    // 编码查询为向量
+    let query_vec = model.encode(&params.q)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
+            error: format!("Encoding failed: {}", e),
+        })))?;
+
+    // HNSW 搜索
+    let candidates = hnsw_search(&query_vec, 20);
+
+    let results: Vec<RecommendItem> = candidates.into_iter()
+        .filter_map(|(item_id, sim_score)| {
+            let idx = *state.item_map.get(&item_id)?;
+            let item = &state.items[idx];
+            Some(RecommendItem {
+                item_id,
+                name: item.name.clone(),
+                category: item.category.clone(),
+                image_url: item.image_url.clone(),
+                price: item.price,
+                sim_score,
+                popularity: item.popularity,
+                final_score: sim_score,
+            })
+        })
+        .collect();
+
+    Ok(Json(SearchResponse { query: params.q, results }))
+}
+
 async fn health_handler() -> &'static str { "OK" }
 
 // ============================================================================
@@ -217,7 +263,33 @@ fn init_users() -> Vec<User> {
     ]
 }
 
-fn load_items_from_json() -> Result<Vec<Item>> {
+fn load_items_from_json(embedding_model: &embedding::EmbeddingModel) -> Result<Vec<Item>> {
+    use rand::Rng;
+    let json_str = std::fs::read_to_string("assets/products.json")?;
+    let items_json: Vec<ItemJson> = serde_json::from_str(&json_str)?;
+    let mut rng = rand::thread_rng();
+    let total = items_json.len();
+    println!("🧠 Encoding {} items with ONNX model...", total);
+    
+    let items: Vec<Item> = items_json.into_iter()
+        .enumerate()
+        .map(|(i, json)| {
+            // 使用 ONNX 模型生成真实语义向量
+            let embedding = embedding_model.encode(&json.name)
+                .unwrap_or_else(|_| generate_category_embedding(&json.category));
+            let popularity = rng.gen::<f32>();
+            if (i + 1) % 50 == 0 {
+                println!("   Encoded {}/{} items", i + 1, total);
+            }
+            Item::from_json(json, embedding, popularity)
+        })
+        .collect();
+    
+    println!("✅ All {} items encoded with semantic vectors", total);
+    Ok(items)
+}
+
+fn load_items_from_json_fallback() -> Result<Vec<Item>> {
     use rand::Rng;
     let json_str = std::fs::read_to_string("assets/products.json")?;
     let items_json: Vec<ItemJson> = serde_json::from_str(&json_str)?;
@@ -231,10 +303,16 @@ fn load_items_from_json() -> Result<Vec<Item>> {
         .collect())
 }
 
-fn init_data_with_storage(storage: Arc<Storage>) -> Result<Arc<AppState>> {
+fn init_data_with_storage(storage: Arc<Storage>, embedding_model: Option<Arc<embedding::EmbeddingModel>>) -> Result<Arc<AppState>> {
     let items = if storage.items_count() == 0 {
         println!("📂 Database empty, loading from products.json...");
-        let items = load_items_from_json()?;
+        let items = match &embedding_model {
+            Some(model) => load_items_from_json(model)?,
+            None => {
+                println!("⚠️  No embedding model, using category-based vectors");
+                load_items_from_json_fallback()?
+            }
+        };
         for item in &items { storage.save_item(item)?; }
         println!("💾 Saved {} items to database", items.len());
         items
@@ -256,7 +334,7 @@ fn init_data_with_storage(storage: Arc<Storage>) -> Result<Arc<AppState>> {
 
     let item_map: HashMap<u64, usize> = items.iter().enumerate().map(|(i, item)| (item.id, i)).collect();
 
-    Ok(Arc::new(AppState { storage, users, items, item_map }))
+    Ok(Arc::new(AppState { storage, users, items, item_map, embedding_model }))
 }
 
 // ============================================================================
@@ -324,10 +402,22 @@ async fn graceful_shutdown(storage: Arc<Storage>) {
 async fn main() -> Result<()> {
     println!("🚀 Initializing Mini-RecSys...\n");
 
+    // 1. 初始化 ONNX 模型
+    let embedding_model = match embedding::EmbeddingModel::new() {
+        Ok(model) => {
+            println!("🧠 Embedding model loaded (dimension: {})\n", model.dimension());
+            Some(Arc::new(model))
+        }
+        Err(e) => {
+            eprintln!("⚠️  Failed to load embedding model: {}\n   /search will be unavailable\n", e);
+            None
+        }
+    };
+
     let storage = Arc::new(Storage::new(DB_PATH)?);
     println!("💾 Sled database opened at {}\n", DB_PATH);
 
-    let state = init_data_with_storage(Arc::clone(&storage))?;
+    let state = init_data_with_storage(Arc::clone(&storage), embedding_model)?;
     println!("📊 Loaded {} users, {} items\n", state.users.len(), state.items.len());
 
     init_hnsw_with_hydration(&state.items)?;
@@ -342,13 +432,14 @@ async fn main() -> Result<()> {
         .route("/health", get(health_handler))
         .route("/users", get(users_handler))
         .route("/recommend", get(recommend_handler))
+        .route("/search", get(search_handler))
         .route("/mark_seen", post(mark_seen_handler))
         .layer(cors)
         .with_state(Arc::clone(&state));
 
     let addr = "0.0.0.0:3000";
     println!("🌐 Server running at http://{}", addr);
-    println!("   POST /mark_seen - 标记已看商品");
+    println!("   GET  /search?q=<query> - 语义搜索");
     println!("   Press Ctrl+C to shutdown gracefully\n");
 
     let listener = tokio::net::TcpListener::bind(addr).await?;

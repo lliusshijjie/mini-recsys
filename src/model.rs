@@ -3,7 +3,7 @@
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
-pub const DIM: usize = 64;
+pub const DIM: usize = 384;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {

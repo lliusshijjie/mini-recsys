@@ -19,6 +19,9 @@ function App() {
     const [error, setError] = useState('')
     const [responseTime, setResponseTime] = useState(null)
     const [filteredCount, setFilteredCount] = useState(0)
+    const [searchQuery, setSearchQuery] = useState('')
+    const [searchResults, setSearchResults] = useState([])
+    const [isSearchMode, setIsSearchMode] = useState(false)
 
     useEffect(() => {
         axios.get(`${API_BASE}/users`)
@@ -49,6 +52,27 @@ function App() {
         } catch (err) {
             setError(err.response?.data?.error || err.message)
             setRecommendations([])
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleSearch = async () => {
+        if (!searchQuery.trim()) return
+        setLoading(true)
+        setError('')
+        setIsSearchMode(true)
+        const start = performance.now()
+
+        try {
+            const res = await axios.get(`${API_BASE}/search?q=${encodeURIComponent(searchQuery)}`)
+            setSearchResults(res.data.results)
+            setRecommendations([])
+            setCurrentUser(null)
+            setResponseTime((performance.now() - start).toFixed(0))
+        } catch (err) {
+            setError(err.response?.data?.error || err.message)
+            setSearchResults([])
         } finally {
             setLoading(false)
         }
@@ -86,10 +110,31 @@ function App() {
             <main className="max-w-7xl mx-auto px-6 py-8">
                 {/* Control Bar */}
                 <div className="flex flex-wrap gap-4 mb-8 items-center">
+                    {/* Search Box */}
+                    <div className="flex gap-2">
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                            placeholder="🔍 Semantic search..."
+                            className="px-4 py-3 rounded-lg bg-slate-800 border border-slate-600 text-white focus:border-purple-500 focus:outline-none w-[280px]"
+                        />
+                        <button
+                            onClick={handleSearch}
+                            disabled={loading || !searchQuery.trim()}
+                            className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-lg font-semibold text-white transition-all disabled:opacity-50"
+                        >
+                            🔍 Search
+                        </button>
+                    </div>
+
+                    <div className="border-l border-slate-600 h-8 mx-2"></div>
+
                     <select
                         value={selectedUserId}
                         onChange={(e) => setSelectedUserId(Number(e.target.value))}
-                        className="px-4 py-3 rounded-lg bg-slate-800 border border-slate-600 text-white focus:border-blue-500 focus:outline-none min-w-[280px]"
+                        className="px-4 py-3 rounded-lg bg-slate-800 border border-slate-600 text-white focus:border-blue-500 focus:outline-none min-w-[200px]"
                     >
                         {users.map(u => (
                             <option key={u.id} value={u.id}>{u.name}</option>
@@ -97,16 +142,19 @@ function App() {
                     </select>
 
                     <button
-                        onClick={fetchRecommendations}
+                        onClick={() => { setIsSearchMode(false); setSearchResults([]); fetchRecommendations(); }}
                         disabled={loading}
                         className="px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 rounded-lg font-semibold text-white transition-all disabled:opacity-50"
                     >
-                        {loading ? '⏳ Loading...' : '🚀 Get Recommendations'}
+                        {loading ? '⏳ Loading...' : '🚀 Recommend'}
                     </button>
 
-                    {currentUser && (
+                    {(currentUser || isSearchMode) && (
                         <div className="ml-auto text-sm text-slate-400">
-                            Showing results for: <span className="text-white font-medium">{currentUser.name}</span>
+                            {isSearchMode
+                                ? <>Searching: <span className="text-purple-400 font-medium">"{searchQuery}"</span></>
+                                : <>Showing results for: <span className="text-white font-medium">{currentUser?.name}</span></>
+                            }
                         </div>
                     )}
                 </div>
@@ -118,9 +166,9 @@ function App() {
                 )}
 
                 {/* Results Grid */}
-                {recommendations.length > 0 ? (
+                {(isSearchMode ? searchResults : recommendations).length > 0 ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        {recommendations.map((item, idx) => {
+                        {(isSearchMode ? searchResults : recommendations).map((item, idx) => {
                             const style = getCategoryStyle(item.category)
                             return (
                                 <div

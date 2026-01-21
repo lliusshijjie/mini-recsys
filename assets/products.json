@@ -1,1052 +1,1052 @@
 [
     {
         "id": 1,
-        "title": "罗技 MX Master 3S 鼠标",
+        "title": "Logitech MX Master 3S Mouse",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1527864550417-7fd91fc51a46?w=400&h=300&fit=crop",
         "price": 99.99
     },
     {
         "id": 2,
-        "title": "HHKB 静电容键盘",
+        "title": "HHKB Professional Hybrid Keyboard",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1511467687858-23d96c32e4ae?w=400&h=300&fit=crop",
         "price": 320.00
     },
     {
         "id": 3,
-        "title": "索尼 WH-1000XM5 耳机",
+        "title": "Sony WH-1000XM5 Headphones",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=300&fit=crop",
         "price": 349.99
     },
     {
         "id": 4,
-        "title": "树莓派 5 开发板",
+        "title": "Raspberry Pi 5 Board",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1518770660439-4636190af475?w=400&h=300&fit=crop",
         "price": 80.00
     },
     {
         "id": 5,
-        "title": "Steam Deck OLED 掌机",
+        "title": "Steam Deck OLED Console",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1606144042614-b2417e99c4e3?w=400&h=300&fit=crop",
         "price": 549.00
     },
     {
         "id": 6,
-        "title": "超大号机械键盘鼠标垫",
+        "title": "Large Gaming Mouse Pad",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1616933067445-842bda5c4ff1?w=400&h=300&fit=crop",
         "price": 39.99
     },
     {
         "id": 7,
-        "title": "USB-C 十合一扩展坞",
+        "title": "USB-C 10-in-1 Docking Station",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1625842268584-8f3296236761?w=400&h=300&fit=crop",
         "price": 79.99
     },
     {
         "id": 8,
-        "title": "苹果妙控触控板",
+        "title": "Apple Magic Trackpad",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=400&h=300&fit=crop",
         "price": 129.00
     },
     {
         "id": 9,
-        "title": "Keychron Q1 Pro 机械键盘",
+        "title": "Keychron Q1 Pro Mechanical Keyboard",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=400&h=300&fit=crop",
         "price": 199.00
     },
     {
         "id": 10,
-        "title": "Elgato Stream Deck 直播控制器",
+        "title": "Elgato Stream Deck Controller",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1593642632559-0c6d3fc62b89?w=400&h=300&fit=crop",
         "price": 149.99
     },
     {
         "id": 11,
-        "title": "三星 T7 移动固态硬盘 2TB",
+        "title": "Samsung T7 Portable SSD 2TB",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1597848212624-a19eb35e2651?w=400&h=300&fit=crop",
         "price": 179.99
     },
     {
         "id": 12,
-        "title": "CalDigit TS4 雷电扩展坞",
+        "title": "CalDigit TS4 Thunderbolt Dock",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1625842268584-8f3296236761?w=400&h=300&fit=crop",
         "price": 399.00
     },
     {
         "id": 13,
-        "title": "AirPods Pro 2 无线耳机",
+        "title": "AirPods Pro 2 Wireless Earbuds",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1606220588913-b3aacb4d2f46?w=400&h=300&fit=crop",
         "price": 249.00
     },
     {
         "id": 14,
-        "title": "罗技 C920 高清摄像头",
+        "title": "Logitech C920 HD Webcam",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1587826080692-f439cd0b70da?w=400&h=300&fit=crop",
         "price": 69.99
     },
     {
         "id": 15,
-        "title": "Blue Yeti 电容麦克风",
+        "title": "Blue Yeti Condenser Microphone",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1590602847861-f357a9332bbc?w=400&h=300&fit=crop",
         "price": 129.99
     },
     {
         "id": 16,
-        "title": "任天堂 Switch OLED 游戏机",
+        "title": "Nintendo Switch OLED Console",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1578303512597-81e6cc155b3e?w=400&h=300&fit=crop",
         "price": 349.99
     },
     {
         "id": 17,
-        "title": "Arduino 入门套件",
+        "title": "Arduino Starter Kit",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1553406830-ef2513450d76?w=400&h=300&fit=crop",
         "price": 79.99
     },
     {
         "id": 18,
-        "title": "ESP32 开发板",
+        "title": "ESP32 Development Board",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1518770660439-4636190af475?w=400&h=300&fit=crop",
         "price": 12.99
     },
     {
         "id": 19,
-        "title": "USB 示波器",
+        "title": "USB Oscilloscope",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?w=400&h=300&fit=crop",
         "price": 199.00
     },
     {
         "id": 20,
-        "title": "电烙铁焊接套装",
+        "title": "Soldering Iron Kit",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1588783898400-a21a32a5e57c?w=400&h=300&fit=crop",
         "price": 89.99
     },
     {
         "id": 21,
-        "title": "Framework 模块化笔记本 16",
+        "title": "Framework Laptop 16 (Modular)",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=400&h=300&fit=crop",
         "price": 1399.00
     },
     {
         "id": 22,
-        "title": "LG 27寸 4K 显示器",
+        "title": "LG 27-inch 4K Monitor",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=400&h=300&fit=crop",
         "price": 799.99
     },
     {
         "id": 23,
-        "title": "Anker 大容量移动电源",
+        "title": "Anker Power Bank",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?w=400&h=300&fit=crop",
         "price": 149.99
     },
     {
         "id": 24,
-        "title": "Flipper Zero 多功能工具",
+        "title": "Flipper Zero Multi-tool",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&h=300&fit=crop",
         "price": 169.00
     },
     {
         "id": 25,
-        "title": "Remarkable 2 电子墨水平板",
+        "title": "Remarkable 2 E-Ink Tablet",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=400&h=300&fit=crop",
         "price": 299.00
     },
     {
         "id": 26,
-        "title": "Rust 程序设计语言",
+        "title": "The Rust Programming Language",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=400&h=300&fit=crop",
         "price": 39.99
     },
     {
         "id": 27,
-        "title": "Rust 编程之道",
+        "title": "Rust in Action",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=400&h=300&fit=crop",
         "price": 59.99
     },
     {
         "id": 28,
-        "title": "Effective C++ 中文版",
+        "title": "Effective C++",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1512820790803-83ca734da794?w=400&h=300&fit=crop",
         "price": 49.99
     },
     {
         "id": 29,
-        "title": "设计模式：可复用面向对象软件的基础",
+        "title": "Design Patterns: Elements of Reusable Object-Oriented Software",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1589998059171-988d887df646?w=400&h=300&fit=crop",
         "price": 54.99
     },
     {
         "id": 30,
-        "title": "计算机程序的构造和解释 SICP",
+        "title": "Structure and Interpretation of Computer Programs (SICP)",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=400&h=300&fit=crop",
         "price": 45.00
     },
     {
         "id": 31,
-        "title": "代码整洁之道",
+        "title": "Clean Code",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1544947950-fa07a98d237f?w=400&h=300&fit=crop",
         "price": 42.99
     },
     {
         "id": 32,
-        "title": "计算机程序设计艺术 TAOCP",
+        "title": "The Art of Computer Programming (TAOCP)",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1519682337058-a94d519337bc?w=400&h=300&fit=crop",
         "price": 199.99
     },
     {
         "id": 33,
-        "title": "算法导论 第三版",
+        "title": "Introduction to Algorithms (CLRS)",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=400&h=300&fit=crop",
         "price": 89.99
     },
     {
         "id": 34,
-        "title": "深入理解计算机系统 CSAPP",
+        "title": "Computer Systems: A Programmer's Perspective (CSAPP)",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1491841573634-28140fc7ced7?w=400&h=300&fit=crop",
         "price": 139.99
     },
     {
         "id": 35,
-        "title": "操作系统导论 OSTEP",
+        "title": "Operating Systems: Three Easy Pieces (OSTEP)",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?w=400&h=300&fit=crop",
         "price": 49.99
     },
     {
         "id": 36,
-        "title": "程序员修炼之道",
+        "title": "The Pragmatic Programmer",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=400&h=300&fit=crop",
         "price": 49.99
     },
     {
         "id": 37,
-        "title": "重构：改善既有代码的设计",
+        "title": "Refactoring",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1553729459-efe14ef6055d?w=400&h=300&fit=crop",
         "price": 47.99
     },
     {
         "id": 38,
-        "title": "领域驱动设计",
+        "title": "Domain-Driven Design",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1495446815901-a7297e633e8d?w=400&h=300&fit=crop",
         "price": 59.99
     },
     {
         "id": 39,
-        "title": "数据密集型应用系统设计 DDIA",
+        "title": "Designing Data-Intensive Applications (DDIA)",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=400&h=300&fit=crop",
         "price": 44.99
     },
     {
         "id": 40,
-        "title": "性能之巅",
+        "title": "Systems Performance",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1550399105-c4db5fb85c18?w=400&h=300&fit=crop",
         "price": 59.99
     },
     {
         "id": 41,
-        "title": "数据库系统内幕",
+        "title": "Database Internals",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1516979187457-637abb4f9353?w=400&h=300&fit=crop",
         "price": 49.99
     },
     {
         "id": 42,
-        "title": "手写解释器",
+        "title": "Writing An Interpreter In Go",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=400&h=300&fit=crop",
         "price": 59.99
     },
     {
         "id": 43,
-        "title": "Linux/UNIX 系统编程手册",
+        "title": "The Linux Programming Interface",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1512820790803-83ca734da794?w=400&h=300&fit=crop",
         "price": 79.99
     },
     {
         "id": 44,
-        "title": "TCP/IP 详解 卷一",
+        "title": "TCP/IP Illustrated, Volume 1",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=400&h=300&fit=crop",
         "price": 69.99
     },
     {
         "id": 45,
-        "title": "编译原理 龙书",
+        "title": "Compilers: Principles, Techniques, and Tools (Dragon Book)",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1589998059171-988d887df646?w=400&h=300&fit=crop",
         "price": 149.99
     },
     {
         "id": 46,
-        "title": "计算机网络：自顶向下方法",
+        "title": "Computer Networking: A Top-Down Approach",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1544947950-fa07a98d237f?w=400&h=300&fit=crop",
         "price": 89.99
     },
     {
         "id": 47,
-        "title": "现代操作系统",
+        "title": "Modern Operating Systems",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1519682337058-a94d519337bc?w=400&h=300&fit=crop",
         "price": 119.99
     },
     {
         "id": 48,
-        "title": "Rust 进阶之路",
+        "title": "Rust for Rustaceans",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?w=400&h=300&fit=crop",
         "price": 44.99
     },
     {
         "id": 49,
-        "title": "Rust Web 开发实战",
+        "title": "Zero to Production in Rust",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1491841573634-28140fc7ced7?w=400&h=300&fit=crop",
         "price": 49.99
     },
     {
         "id": 50,
-        "title": "Rust 异步编程",
+        "title": "Asynchronous Programming in Rust",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?w=400&h=300&fit=crop",
         "price": 39.99
     },
     {
         "id": 51,
-        "title": "电动升降桌",
+        "title": "Electric Standing Desk",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=400&h=300&fit=crop",
         "price": 599.00
     },
     {
         "id": 52,
-        "title": "Herman Miller Aeron 人体工学椅",
+        "title": "Herman Miller Aeron Ergonomic Chair",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1580480055273-228ff5388ef8?w=400&h=300&fit=crop",
         "price": 1395.00
     },
     {
         "id": 53,
-        "title": "LED 台灯 带USB充电",
+        "title": "LED Desk Lamp with USB Charging",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=400&h=300&fit=crop",
         "price": 49.99
     },
     {
         "id": 54,
-        "title": "桌面理线器套装",
+        "title": "Cable Management Kit",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1593642702821-c8da6771f0c6?w=400&h=300&fit=crop",
         "price": 29.99
     },
     {
         "id": 55,
-        "title": "显示器支架臂",
+        "title": "Monitor Arm Stand",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=400&h=300&fit=crop",
         "price": 89.00
     },
     {
         "id": 56,
-        "title": "Rust 螃蟹 Ferris 玩偶",
+        "title": "Rust Ferris Plush",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=300&fit=crop",
         "price": 24.99
     },
     {
         "id": 57,
-        "title": "电竞椅",
+        "title": "Gaming Chair",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1598550476439-6847785fcea6?w=400&h=300&fit=crop",
         "price": 499.00
     },
     {
         "id": 58,
-        "title": "吸音棉隔音板",
+        "title": "Acoustic Foam Panels",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=300&fit=crop",
         "price": 39.99
     },
     {
         "id": 59,
-        "title": "无线充电板",
+        "title": "Wireless Charging Pad",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1609091839311-d5365f9ff1c5?w=400&h=300&fit=crop",
         "price": 29.99
     },
     {
         "id": 60,
-        "title": "桌面收纳盒套装",
+        "title": "Desk Organizer Set",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1544816155-12df9643f363?w=400&h=300&fit=crop",
         "price": 34.99
     },
     {
         "id": 61,
-        "title": "Nanoleaf 智能灯板",
+        "title": "Nanoleaf Light Panels",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=300&fit=crop",
         "price": 199.99
     },
     {
         "id": 62,
-        "title": "智能插排",
+        "title": "Smart Power Strip",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1544816155-12df9643f363?w=400&h=300&fit=crop",
         "price": 39.99
     },
     {
         "id": 63,
-        "title": "人体工学脚踏",
+        "title": "Ergonomic Footrest",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=400&h=300&fit=crop",
         "price": 49.99
     },
     {
         "id": 64,
-        "title": "白板 120x90cm",
+        "title": "Whiteboard 120x90cm",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1517048676732-d65bc937f952?w=400&h=300&fit=crop",
         "price": 89.99
     },
     {
         "id": 65,
-        "title": "迷你服务器机柜",
+        "title": "Mini Server Rack",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=400&h=300&fit=crop",
         "price": 149.00
     },
     {
         "id": 66,
-        "title": "UPS 不间断电源",
+        "title": "UPS Uninterruptible Power Supply",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=400&h=300&fit=crop",
         "price": 179.99
     },
     {
         "id": 67,
-        "title": "键盘手腕托",
+        "title": "Keyboard Wrist Rest",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=400&h=300&fit=crop",
         "price": 19.99
     },
     {
         "id": 68,
-        "title": "防窥屏",
+        "title": "Privacy Screen Filter",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=400&h=300&fit=crop",
         "price": 49.99
     },
     {
         "id": 69,
-        "title": "空气净化器",
+        "title": "Air Purifier",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1585771724684-38269d6639fd?w=400&h=300&fit=crop",
         "price": 199.99
     },
     {
         "id": 70,
-        "title": "皮质桌垫",
+        "title": "Leather Desk Mat",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1518455027359-f3f8164ba6bd?w=400&h=300&fit=crop",
         "price": 39.99
     },
     {
         "id": 71,
-        "title": "屏幕挂灯",
+        "title": "Monitor Light Bar",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=400&h=300&fit=crop",
         "price": 59.99
     },
     {
         "id": 72,
-        "title": "五层书架",
+        "title": "5-Tier Bookshelf",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=400&h=300&fit=crop",
         "price": 79.99
     },
     {
         "id": 73,
-        "title": "绿植盆栽套装",
+        "title": "Potted Plants Set",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1459411552884-841db9b3cc2a?w=400&h=300&fit=crop",
         "price": 24.99
     },
     {
         "id": 74,
-        "title": "数字时钟",
+        "title": "Digital Clock",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1563861826100-9cb868fdbe1c?w=400&h=300&fit=crop",
         "price": 29.99
     },
     {
         "id": 75,
-        "title": "实木耳机架",
+        "title": "Wooden Headphone Stand",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=300&fit=crop",
         "price": 34.99
     },
     {
         "id": 76,
-        "title": "我爱 Rust T恤",
+        "title": "I Love Rust T-Shirt",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400&h=300&fit=crop",
         "price": 25.00
     },
     {
         "id": 77,
-        "title": "Linux 企鹅卫衣",
+        "title": "Linux Penguin Hoodie",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=400&h=300&fit=crop",
         "price": 55.00
     },
     {
         "id": 78,
-        "title": "Git Commit 极客袜子",
+        "title": "Git Commit Geek Socks",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1586350977771-b3b0abd50c82?w=400&h=300&fit=crop",
         "price": 15.00
     },
     {
         "id": 79,
-        "title": "Vim vs Emacs 棒球帽",
+        "title": "Vim vs Emacs Cap",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=400&h=300&fit=crop",
         "price": 22.00
     },
     {
         "id": 80,
-        "title": "二进制代码围巾",
+        "title": "Binary Code Scarf",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1520903920243-00d872a2d1c9?w=400&h=300&fit=crop",
         "price": 35.00
     },
     {
         "id": 81,
-        "title": "404 未找到 T恤",
+        "title": "404 Not Found T-Shirt",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?w=400&h=300&fit=crop",
         "price": 24.99
     },
     {
         "id": 82,
-        "title": "127.0.0.1 程序员T恤",
+        "title": "127.0.0.1 Home T-Shirt",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=400&h=300&fit=crop",
         "price": 25.00
     },
     {
         "id": 83,
-        "title": "Stack Overflow 开发者卫衣",
+        "title": "Stack Overflow Hoodie",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1578587018452-892bacefd3f2?w=400&h=300&fit=crop",
         "price": 59.99
     },
     {
         "id": 84,
-        "title": "GitHub 章鱼猫 T恤",
+        "title": "GitHub Octocat T-Shirt",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1562157873-818bc0726f68?w=400&h=300&fit=crop",
         "price": 28.00
     },
     {
         "id": 85,
-        "title": "Kubernetes 鸭舌帽",
+        "title": "Kubernetes Cap",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1521369909029-2afed882baee?w=400&h=300&fit=crop",
         "price": 24.99
     },
     {
         "id": 86,
-        "title": "Docker 鲸鱼毛线帽",
+        "title": "Docker Whale Beanie",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1576871337622-98d48d1cf531?w=400&h=300&fit=crop",
         "price": 19.99
     },
     {
         "id": 87,
-        "title": "AWS 云服务夹克",
+        "title": "AWS Cloud Jacket",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1551028719-00167b16eac5?w=400&h=300&fit=crop",
         "price": 89.99
     },
     {
         "id": 88,
-        "title": "Python 蛇形皮带",
+        "title": "Python Snake Belt",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1624222247344-550fb60583dc?w=400&h=300&fit=crop",
         "price": 29.99
     },
     {
         "id": 89,
-        "title": "JavaScript 黄色 T恤",
+        "title": "JavaScript Yellow T-Shirt",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1618354691373-d851c5c3a990?w=400&h=300&fit=crop",
         "price": 24.99
     },
     {
         "id": 90,
-        "title": "Go 地鼠 Polo衫",
+        "title": "Go Gopher Polo Shirt",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1598033129183-c4f50c736f10?w=400&h=300&fit=crop",
         "price": 39.99
     },
     {
         "id": 91,
-        "title": "C++ 模板元编程 T恤",
+        "title": "C++ Template Metaprogramming T-Shirt",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=400&h=300&fit=crop",
         "price": 27.99
     },
     {
         "id": 92,
-        "title": "Haskell Lambda 开衫",
+        "title": "Haskell Lambda Cardigan",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1434389677669-e08b4cac3105?w=400&h=300&fit=crop",
         "price": 69.99
     },
     {
         "id": 93,
-        "title": "SQL 查询背带裤",
+        "title": "SQL Query Overalls",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1542272604-787c3835535d?w=400&h=300&fit=crop",
         "price": 34.99
     },
     {
         "id": 94,
-        "title": "机器学习神经网络领带",
+        "title": "Neural Network Tie",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1598211686290-a8ef209d87c5?w=400&h=300&fit=crop",
         "price": 29.99
     },
     {
         "id": 95,
-        "title": "开源贡献者工牌挂绑",
+        "title": "Open Source Contributor Lanyard",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=400&h=300&fit=crop",
         "price": 9.99
     },
     {
         "id": 96,
-        "title": "正则表达式手套",
+        "title": "Regex Gloves",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1578632292335-df3abbb0d586?w=400&h=300&fit=crop",
         "price": 19.99
     },
     {
         "id": 97,
-        "title": "终端绿字睡衣",
+        "title": "Terminal Green Text Pajamas",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1617952739858-28043cecdae3?w=400&h=300&fit=crop",
         "price": 44.99
     },
     {
         "id": 98,
-        "title": "Debug 小黄鸭",
+        "title": "Debug Rubber Duck",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1535572290543-960a8046f5af?w=400&h=300&fit=crop",
         "price": 9.99
     },
     {
         "id": 99,
-        "title": "分号幸存者 T恤",
+        "title": "Semicolon Survivor T-Shirt",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1489987707025-afc232f7ea0f?w=400&h=300&fit=crop",
         "price": 24.99
     },
     {
         "id": 100,
-        "title": "无限循环围巾",
+        "title": "Infinite Loop Scarf",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1520903920243-00d872a2d1c9?w=400&h=300&fit=crop",
         "price": 39.99
     },
     {
         "id": 101,
-        "title": "高端游戏显卡 RTX 4090",
+        "title": "RTX 4090 Graphics Card",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1591488320449-011701bb6704?w=400&h=300&fit=crop",
         "price": 1599.00
     },
     {
         "id": 102,
-        "title": "机械硬盘 8TB NAS专用",
+        "title": "8TB NAS Hard Drive",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1597848212624-a19eb35e2651?w=400&h=300&fit=crop",
         "price": 199.99
     },
     {
         "id": 103,
-        "title": "人工智能入门",
+        "title": "Introduction to AI",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=400&h=300&fit=crop",
         "price": 59.99
     },
     {
         "id": 104,
-        "title": "机器学习实战",
+        "title": "Machine Learning in Action",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=400&h=300&fit=crop",
         "price": 69.99
     },
     {
         "id": 105,
-        "title": "智能扫地机器人",
+        "title": "Robot Vacuum Cleaner",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=300&fit=crop",
         "price": 399.00
     },
     {
         "id": 106,
-        "title": "咖啡机全自动",
+        "title": "Automatic Coffee Machine",
         "category": "Home",
         "image_url": "https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=400&h=300&fit=crop",
         "price": 299.00
     },
     {
         "id": 107,
-        "title": "运动健身T恤",
+        "title": "Workout T-Shirt",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400&h=300&fit=crop",
         "price": 35.00
     },
     {
         "id": 108,
-        "title": "休闲运动裤",
+        "title": "Casual Sweatpants",
         "category": "Clothing",
         "image_url": "https://images.unsplash.com/photo-1542272604-787c3835535d?w=400&h=300&fit=crop",
         "price": 45.00
     },
     {
         "id": 109,
-        "title": "神秘盲盒商品A",
+        "title": "Mystery Box A",
         "category": "Misc",
         "image_url": "https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=400&h=300&fit=crop",
         "price": 19.99
     },
     {
         "id": 110,
-        "title": "随机礼物盒",
+        "title": "Random Gift Box",
         "category": "Misc",
         "image_url": "https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=400&h=300&fit=crop",
         "price": 29.99
     },
     {
         "id": 111,
-        "title": "测试商品噪声1",
+        "title": "Test Item Noise 1",
         "category": "Misc",
         "image_url": "https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=400&h=300&fit=crop",
         "price": 9.99
     },
     {
         "id": 112,
-        "title": "未分类商品X",
+        "title": "Unclassified Item X",
         "category": "Misc",
         "image_url": "https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=400&h=300&fit=crop",
         "price": 14.99
     },
     {
         "id": 113,
-        "title": "VR头显设备",
+        "title": "VR Headset",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1622979135225-d2ba269cf1ac?w=400&h=300&fit=crop",
         "price": 499.00
     },
     {
         "id": 114,
-        "title": "智能手表运动版",
+        "title": "Smart Watch Sport Edition",
         "category": "Electronics",
         "image_url": "https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=400&h=300&fit=crop",
         "price": 299.00
     },
     {
         "id": 115,
-        "title": "分布式系统设计",
-        "category": "Books",
-        "image_url": "https://images.unsplash.com/photo-1512820790803-83ca734da794?w=400&h=300&fit=crop",
-        "price": 79.99
+        "title": "Portable Bluetooth Speaker",
+        "category": "Electronics",
+        "image_url": "https://images.unsplash.com/photo-1589254065878-42c9da997008?w=400&h=300&fit=crop",
+        "price": 59.99
     },
     {
         "id": 116,
-        "title": "微服务架构实践",
-        "category": "Books",
-        "image_url": "https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=400&h=300&fit=crop",
-        "price": 64.99
+        "title": "Drone with 4K Camera",
+        "category": "Electronics",
+        "image_url": "https://images.unsplash.com/photo-1507582020474-9a35b7d455d9?w=400&h=300&fit=crop",
+        "price": 899.99
     },
     {
         "id": 117,
-        "title": "智能门锁",
-        "category": "Home",
-        "image_url": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=300&fit=crop",
-        "price": 249.00
+        "title": "Action Camera Ultra HD",
+        "category": "Electronics",
+        "image_url": "https://images.unsplash.com/photo-1521405924368-64c4854ebea6?w=400&h=300&fit=crop",
+        "price": 299.99
     },
     {
         "id": 118,
-        "title": "无线路由器 WiFi6",
+        "title": "Gaming Headset",
         "category": "Electronics",
-        "image_url": "https://images.unsplash.com/photo-1606220588913-b3aacb4d2f46?w=400&h=300&fit=crop",
-        "price": 129.00
+        "image_url": "https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=400&h=300&fit=crop",
+        "price": 79.99
     },
     {
         "id": 119,
-        "title": "程序员专用帽衫",
-        "category": "Clothing",
-        "image_url": "https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=400&h=300&fit=crop",
-        "price": 79.00
+        "title": "Smart Theromostat",
+        "category": "Electronics",
+        "image_url": "https://images.unsplash.com/photo-1563853684126-7fb0c90539c2?w=400&h=300&fit=crop",
+        "price": 149.99
     },
     {
         "id": 120,
-        "title": "复古打字机",
-        "category": "Misc",
-        "image_url": "https://images.unsplash.com/photo-1504707748692-419802cf939d?w=400&h=300&fit=crop",
-        "price": 199.00
+        "title": "Video Doorbell",
+        "category": "Electronics",
+        "image_url": "https://images.unsplash.com/photo-1558002038-1091a921d7b1?w=400&h=300&fit=crop",
+        "price": 99.99
     },
     {
         "id": 121,
-        "title": "迷你投影仪",
+        "title": "Mesh Wi-Fi System",
         "category": "Electronics",
-        "image_url": "https://images.unsplash.com/photo-1593359677879-a4bb92f829d1?w=400&h=300&fit=crop",
-        "price": 349.00
+        "image_url": "https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=400&h=300&fit=crop",
+        "price": 249.99
     },
     {
         "id": 122,
-        "title": "降噪蓝牙耳塞",
+        "title": "Graphics Tablet",
         "category": "Electronics",
-        "image_url": "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=400&h=300&fit=crop",
-        "price": 159.00
-    },
-    {
-        "id": 123,
-        "title": "Kubernetes权威指南",
-        "category": "Books",
-        "image_url": "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=400&h=300&fit=crop",
-        "price": 89.99
-    },
-    {
-        "id": 124,
-        "title": "智能温控器",
-        "category": "Home",
-        "image_url": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=300&fit=crop",
-        "price": 149.00
-    },
-    {
-        "id": 125,
-        "title": "电竞手套",
-        "category": "Clothing",
-        "image_url": "https://images.unsplash.com/photo-1578632292335-df3abbb0d586?w=400&h=300&fit=crop",
-        "price": 29.99
-    },
-    {
-        "id": 126,
-        "title": "外星人摆件",
-        "category": "Misc",
-        "image_url": "https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=400&h=300&fit=crop",
-        "price": 24.99
-    },
-    {
-        "id": 127,
-        "title": "便携式显示器 15寸",
-        "category": "Electronics",
-        "image_url": "https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=400&h=300&fit=crop",
-        "price": 269.00
-    },
-    {
-        "id": 128,
-        "title": "云原生应用开发",
-        "category": "Books",
-        "image_url": "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=400&h=300&fit=crop",
-        "price": 74.99
-    },
-    {
-        "id": 129,
-        "title": "智能窗帘",
-        "category": "Home",
-        "image_url": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=300&fit=crop",
-        "price": 189.00
-    },
-    {
-        "id": 130,
-        "title": "科技风夹克",
-        "category": "Clothing",
-        "image_url": "https://images.unsplash.com/photo-1551028719-00167b16eac5?w=400&h=300&fit=crop",
-        "price": 129.00
-    },
-    {
-        "id": 131,
-        "title": "数据清洗测试商品",
-        "category": "Misc",
-        "image_url": "https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=400&h=300&fit=crop",
-        "price": 0.01
-    },
-    {
-        "id": 132,
-        "title": "极端价格测试",
-        "category": "Misc",
-        "image_url": "https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=400&h=300&fit=crop",
-        "price": 99999.99
-    },
-    {
-        "id": 133,
-        "title": "Type-C 转接头套装",
-        "category": "Electronics",
-        "image_url": "https://images.unsplash.com/photo-1625842268584-8f3296236761?w=400&h=300&fit=crop",
-        "price": 19.99
-    },
-    {
-        "id": 134,
-        "title": "系统设计面试",
-        "category": "Books",
-        "image_url": "https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=400&h=300&fit=crop",
-        "price": 54.99
-    },
-    {
-        "id": 135,
-        "title": "电动牙刷",
-        "category": "Home",
-        "image_url": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=300&fit=crop",
-        "price": 89.00
-    },
-    {
-        "id": 136,
-        "title": "防蓝光眼镜",
-        "category": "Clothing",
-        "image_url": "https://images.unsplash.com/photo-1574258495973-f010dfbb5371?w=400&h=300&fit=crop",
-        "price": 49.00
-    },
-    {
-        "id": 137,
-        "title": "损坏数据模拟",
-        "category": "Misc",
-        "image_url": "https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=400&h=300&fit=crop",
-        "price": -1.00
-    },
-    {
-        "id": 138,
-        "title": "iPad Pro 12.9寸",
-        "category": "Electronics",
-        "image_url": "https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=400&h=300&fit=crop",
-        "price": 1099.00
-    },
-    {
-        "id": 139,
-        "title": "深度学习入门",
-        "category": "Books",
-        "image_url": "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=400&h=300&fit=crop",
+        "image_url": "https://images.unsplash.com/photo-1561058266-419b6748259b?w=400&h=300&fit=crop",
         "price": 69.99
     },
     {
-        "id": 140,
-        "title": "智能音箱",
-        "category": "Home",
-        "image_url": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=300&fit=crop",
-        "price": 99.00
+        "id": 123,
+        "title": "External Hard Drive 4TB",
+        "category": "Electronics",
+        "image_url": "https://images.unsplash.com/photo-1531742784566-48c5b3644917?w=400&h=300&fit=crop",
+        "price": 109.99
     },
     {
-        "id": 141,
-        "title": "编程主题口罩",
-        "category": "Clothing",
-        "image_url": "https://images.unsplash.com/photo-1584634731339-252c581abfc5?w=400&h=300&fit=crop",
+        "id": 124,
+        "title": "Network Switch 8-Port",
+        "category": "Electronics",
+        "image_url": "https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=400&h=300&fit=crop",
+        "price": 29.99
+    },
+    {
+        "id": 125,
+        "title": "Server Chassis",
+        "category": "Electronics",
+        "image_url": "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=400&h=300&fit=crop",
+        "price": 199.99
+    },
+    {
+        "id": 126,
+        "title": "Microcontroller Pack",
+        "category": "Electronics",
+        "image_url": "https://images.unsplash.com/photo-1553406830-ef2513450d76?w=400&h=300&fit=crop",
+        "price": 35.99
+    },
+    {
+        "id": 127,
+        "title": "Breadboard Kit",
+        "category": "Electronics",
+        "image_url": "https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?w=400&h=300&fit=crop",
+        "price": 14.99
+    },
+    {
+        "id": 128,
+        "title": "Stepper Motor Driver",
+        "category": "Electronics",
+        "image_url": "https://images.unsplash.com/photo-1555616635-640960035043?w=400&h=300&fit=crop",
+        "price": 9.99
+    },
+    {
+        "id": 129,
+        "title": "HDMI Cable 2m",
+        "category": "Electronics",
+        "image_url": "https://images.unsplash.com/photo-1554428135-c3359d9c8492?w=400&h=300&fit=crop",
+        "price": 8.99
+    },
+    {
+        "id": 130,
+        "title": "DisplayPort Cable",
+        "category": "Electronics",
+        "image_url": "https://images.unsplash.com/photo-1554428135-c3359d9c8492?w=400&h=300&fit=crop",
+        "price": 10.99
+    },
+    {
+        "id": 131,
+        "title": "Ethernet Cable Cat6",
+        "category": "Electronics",
+        "image_url": "https://images.unsplash.com/photo-1544197150-b99a580bb7a8?w=400&h=300&fit=crop",
         "price": 12.99
     },
     {
+        "id": 132,
+        "title": "The Go Programming Language",
+        "category": "Books",
+        "image_url": "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=400&h=300&fit=crop",
+        "price": 49.99
+    },
+    {
+        "id": 133,
+        "title": "Python Crash Course",
+        "category": "Books",
+        "image_url": "https://images.unsplash.com/photo-1512820790803-83ca734da794?w=400&h=300&fit=crop",
+        "price": 35.99
+    },
+    {
+        "id": 134,
+        "title": "Fluent Python",
+        "category": "Books",
+        "image_url": "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=400&h=300&fit=crop",
+        "price": 59.99
+    },
+    {
+        "id": 135,
+        "title": "JavaScript: The Definitive Guide",
+        "category": "Books",
+        "image_url": "https://images.unsplash.com/photo-1589998059171-988d887df646?w=400&h=300&fit=crop",
+        "price": 49.99
+    },
+    {
+        "id": 136,
+        "title": "You Don't Know JS",
+        "category": "Books",
+        "image_url": "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=400&h=300&fit=crop",
+        "price": 29.99
+    },
+    {
+        "id": 137,
+        "title": "Learning React",
+        "category": "Books",
+        "image_url": "https://images.unsplash.com/photo-1516979187457-637abb4f9353?w=400&h=300&fit=crop",
+        "price": 45.00
+    },
+    {
+        "id": 138,
+        "title": "Vue.js 3 Fundamentals",
+        "category": "Books",
+        "image_url": "https://images.unsplash.com/photo-1516979187457-637abb4f9353?w=400&h=300&fit=crop",
+        "price": 39.99
+    },
+    {
+        "id": 139,
+        "title": "Pro Angular",
+        "category": "Books",
+        "image_url": "https://images.unsplash.com/photo-1516979187457-637abb4f9353?w=400&h=300&fit=crop",
+        "price": 49.99
+    },
+    {
+        "id": 140,
+        "title": "Head First Java",
+        "category": "Books",
+        "image_url": "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=400&h=300&fit=crop",
+        "price": 49.99
+    },
+    {
+        "id": 141,
+        "title": "Effective Java",
+        "category": "Books",
+        "image_url": "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=400&h=300&fit=crop",
+        "price": 54.99
+    },
+    {
         "id": 142,
-        "title": "未知类别测试",
-        "category": "Unknown",
-        "image_url": "https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=400&h=300&fit=crop",
+        "title": "Spring Boot in Action",
+        "category": "Books",
+        "image_url": "https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=400&h=300&fit=crop",
         "price": 49.99
     },
     {
         "id": 143,
-        "title": "M.2 固态硬盘 2TB",
-        "category": "Electronics",
-        "image_url": "https://images.unsplash.com/photo-1597848212624-a19eb35e2651?w=400&h=300&fit=crop",
-        "price": 189.00
+        "title": "C# in Depth",
+        "category": "Books",
+        "image_url": "https://images.unsplash.com/photo-1512820790803-83ca734da794?w=400&h=300&fit=crop",
+        "price": 49.99
     },
     {
         "id": 144,
-        "title": "敏捷开发实践",
+        "title": "CLR via C#",
         "category": "Books",
         "image_url": "https://images.unsplash.com/photo-1512820790803-83ca734da794?w=400&h=300&fit=crop",
-        "price": 44.99
-    },
-    {
-        "id": 145,
-        "title": "加湿器静音款",
-        "category": "Home",
-        "image_url": "https://images.unsplash.com/photo-1585771724684-38269d6639fd?w=400&h=300&fit=crop",
-        "price": 59.00
-    },
-    {
-        "id": 146,
-        "title": "程序员拖鞋",
-        "category": "Clothing",
-        "image_url": "https://images.unsplash.com/photo-1603487742131-4160ec999306?w=400&h=300&fit=crop",
-        "price": 29.00
-    },
-    {
-        "id": 147,
-        "title": "特殊字符测试 <test>",
-        "category": "Misc",
-        "image_url": "https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?w=400&h=300&fit=crop",
-        "price": 9.99
-    },
-    {
-        "id": 148,
-        "title": "机械键盘定制键帽",
-        "category": "Electronics",
-        "image_url": "https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=400&h=300&fit=crop",
-        "price": 69.00
-    },
-    {
-        "id": 149,
-        "title": "软件工程实践",
-        "category": "Books",
-        "image_url": "https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=400&h=300&fit=crop",
         "price": 59.99
     },
     {
+        "id": 145,
+        "title": "F# for Fun and Profit",
+        "category": "Books",
+        "image_url": "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=400&h=300&fit=crop",
+        "price": 39.99
+    },
+    {
+        "id": 146,
+        "title": "Haskell Programming from First Principles",
+        "category": "Books",
+        "image_url": "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=400&h=300&fit=crop",
+        "price": 59.99
+    },
+    {
+        "id": 147,
+        "title": "Real World OCaml",
+        "category": "Books",
+        "image_url": "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=400&h=300&fit=crop",
+        "price": 49.99
+    },
+    {
+        "id": 148,
+        "title": "Elixir in Action",
+        "category": "Books",
+        "image_url": "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=400&h=300&fit=crop",
+        "price": 45.00
+    },
+    {
+        "id": 149,
+        "title": "Programming Phoenix",
+        "category": "Books",
+        "image_url": "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=400&h=300&fit=crop",
+        "price": 45.00
+    },
+    {
         "id": 150,
-        "title": "电热毯智能版",
-        "category": "Home",
-        "image_url": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400&h=300&fit=crop",
-        "price": 79.00
+        "title": "Seven Languages in Seven Weeks",
+        "category": "Books",
+        "image_url": "https://images.unsplash.com/photo-1532012197267-da84d127e765?w=400&h=300&fit=crop",
+        "price": 35.00
     }
 ]

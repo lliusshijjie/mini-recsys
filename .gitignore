@@ -46,3 +46,8 @@ pip-delete-this-directory.txt
 # Database
 /data/
 *.db
+
+# Models
+/models/
+*.onnx
+*.json
