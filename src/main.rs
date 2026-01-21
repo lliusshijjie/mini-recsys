@@ -4,6 +4,8 @@ mod ffi;
 mod model;
 mod storage;
 mod embedding;
+mod text_search;
+mod hybrid;
 
 use anyhow::Result;
 use axum::{
@@ -18,8 +20,9 @@ use ffi::{add_item_to_hnsw, get_hnsw_count, hnsw_search, load_hnsw_index, save_h
 use model::{generate_category_embedding, generate_user_embedding, generate_random_embedding, Item, ItemJson, User, DIM};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use storage::Storage;
+use text_search::TextSearch;
 use tower_http::cors::CorsLayer;
 use axum::http::{Method, HeaderValue};
 
@@ -37,6 +40,7 @@ pub struct AppState {
     pub items: Vec<Item>,
     pub item_map: HashMap<u64, usize>,
     pub embedding_model: Option<Arc<embedding::EmbeddingModel>>,
+    pub text_search: Arc<TextSearch>,
 }
 
 // ============================================================================
@@ -206,28 +210,41 @@ async fn search_handler(
             error: "Embedding model not loaded".to_string(),
         })))?;
 
-    // 编码查询为向量
+    // 1. Semantic Search (Vector)
     let query_vec = model.encode(&params.q)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
             error: format!("Encoding failed: {}", e),
         })))?;
+    
+    let vec_candidates = hnsw_search(&query_vec, 50); // Top 50 vector results
+    let vec_results: Vec<(u32, f32)> = vec_candidates.into_iter()
+        .map(|(id, score)| (id as u32, score))
+        .collect();
 
-    // HNSW 搜索
-    let candidates = hnsw_search(&query_vec, 20);
+    // 2. Keyword Search (Tantivy)
+    let kw_results = state.text_search.search(&params.q, 50)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, Json(ErrorResponse {
+            error: format!("Text search failed: {}", e),
+        })))?;
 
-    let results: Vec<RecommendItem> = candidates.into_iter()
-        .filter_map(|(item_id, sim_score)| {
-            let idx = *state.item_map.get(&item_id)?;
+    // 3. RRF Merge
+    let merged_results = hybrid::rrf_merge(vec_results, kw_results);
+
+    // 4. Transform to Response
+    let results: Vec<RecommendItem> = merged_results.into_iter()
+        .take(20)
+        .filter_map(|res| {
+            let idx = *state.item_map.get(&(res.id as u64))?;
             let item = &state.items[idx];
             Some(RecommendItem {
-                item_id,
+                item_id: res.id as u64,
                 name: item.name.clone(),
                 category: item.category.clone(),
                 image_url: item.image_url.clone(),
                 price: item.price,
-                sim_score,
+                sim_score: res.score, // RRF Score
                 popularity: item.popularity,
-                final_score: sim_score,
+                final_score: res.score,
             })
         })
         .collect();
@@ -303,7 +320,11 @@ fn load_items_from_json_fallback() -> Result<Vec<Item>> {
         .collect())
 }
 
-fn init_data_with_storage(storage: Arc<Storage>, embedding_model: Option<Arc<embedding::EmbeddingModel>>) -> Result<Arc<AppState>> {
+fn init_data_with_storage(
+    storage: Arc<Storage>,
+    embedding_model: Option<Arc<embedding::EmbeddingModel>>,
+    text_search: Arc<TextSearch>
+) -> Result<Arc<AppState>> {
     let items = if storage.items_count() == 0 {
         println!("📂 Database empty, loading from products.json...");
         let items = match &embedding_model {
@@ -315,6 +336,15 @@ fn init_data_with_storage(storage: Arc<Storage>, embedding_model: Option<Arc<emb
         };
         for item in &items { storage.save_item(item)?; }
         println!("💾 Saved {} items to database", items.len());
+        
+        // Hydrate Tantivy
+        println!("🔍 Building text search index...");
+        for item in &items {
+            text_search.index_item(item)?;
+        }
+        text_search.commit()?;
+        println!("✅ Text index built");
+
         items
     } else {
         println!("📂 Loading items from database...");
@@ -334,7 +364,7 @@ fn init_data_with_storage(storage: Arc<Storage>, embedding_model: Option<Arc<emb
 
     let item_map: HashMap<u64, usize> = items.iter().enumerate().map(|(i, item)| (item.id, i)).collect();
 
-    Ok(Arc::new(AppState { storage, users, items, item_map, embedding_model }))
+    Ok(Arc::new(AppState { storage, users, items, item_map, embedding_model, text_search }))
 }
 
 // ============================================================================
@@ -415,10 +445,13 @@ async fn main() -> Result<()> {
     };
 
     let storage = Arc::new(Storage::new(DB_PATH)?);
-    println!("💾 Sled database opened at {}\n", DB_PATH);
+    println!("💾 Sled database opened at {}", DB_PATH);
 
-    let state = init_data_with_storage(Arc::clone(&storage), embedding_model)?;
-    println!("📊 Loaded {} users, {} items\n", state.users.len(), state.items.len());
+    let text_search = Arc::new(TextSearch::new("data/tantivy_index")?);
+    println!("🔍 Text search index initialized at data/tantivy_index\n");
+
+    let state = init_data_with_storage(Arc::clone(&storage), embedding_model, text_search)?;
+    println!("📊 Loaded {} users, {} items", state.users.len(), state.items.len());
 
     init_hnsw_with_hydration(&state.items)?;
     println!();
