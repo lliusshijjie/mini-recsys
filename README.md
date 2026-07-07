@@ -17,14 +17,57 @@ A high-performance recommendation system featuring a **Rust** web server, an **O
 
 ```mermaid
 graph TD
-    A["Frontend: React"] -->|Search Query| B["Backend: Axum"]
-    B -->|Tokenize| E["ONNX Runtime"]
-    E -->|384D Vector| C["HNSW Engine (C++)"]
-    B -->|Keyword Match| F["Tantivy Engine (Rust)"]
-    C & F -->|RRF Fusion| G["Ranked Results"]
-    B <-->|Metadata| D["Sled DB (Rust)"]
-    D -.->|Hydrate| C
-    D -.->|Hydrate| F
+    A["Frontend\nReact + Vite"]
+
+    subgraph Backend["Backend: Axum + Tokio"]
+        B1["GET /recommend"]
+        B2["GET /search"]
+        B3["POST /mark_seen"]
+    end
+
+    subgraph Engines["Search Engines"]
+        E["ONNX Runtime\nBERT all-MiniLM-L6-v2\n→ 384D Vector"]
+        C["HNSW Index (C++)\nhnswlib · ANN Search"]
+        F["Tantivy\nInverted Index · Keyword Search"]
+    end
+
+    subgraph Processing["Result Processing"]
+        BL["Bloom Filter\nSeen-Item Dedup"]
+        SC["Coarse Ranking\nsim×0.7 + popularity×0.3"]
+        RRF["RRF Merge\nscore = 1 / (60 + rank)"]
+        FB["Popularity Fallback\n补足 Top-5"]
+    end
+
+    subgraph Storage["Storage: Sled KV DB"]
+        D1["users_tree\nUser + Embedding"]
+        D2["items_tree\nItem + Embedding"]
+        D3["history_tree\nBloom Filter bytes"]
+    end
+
+    A -->|uid| B1
+    A -->|query text| B2
+    A -->|item_ids| B3
+
+    B1 -->|user embedding| C
+    C -->|Top-100 candidates| BL
+    D3 -->|get_user_filter| BL
+    BL -->|unseen candidates| SC
+    SC -->|results < 5| FB
+    D2 -->|hot items| FB
+    SC --> A
+    FB --> A
+
+    B2 --> E
+    E -->|384D query vector| C
+    B2 -->|keywords| F
+    C -->|Top-50 vector hits| RRF
+    F -->|Top-50 keyword hits| RRF
+    RRF --> A
+
+    B3 -->|add item_id to filter| D3
+
+    D2 & D1 -.->|startup hydration| C
+    D2 -.->|startup hydration| F
 ```
 
 ## 🚀 Getting Started
