@@ -1,14 +1,14 @@
-//! 存储层 - Sled 嵌入式数据库封装
+//! Storage layer: Sled embedded database wrapper.
 
+use crate::model::{Item, User};
 use anyhow::{Context, Result};
-use fastbloom_rs::{BloomFilter, FilterBuilder, Membership};
+use fastbloom_rs::{BloomFilter, FilterBuilder};
 use sled::{Db, Tree};
-use crate::model::{User, Item};
 
-/// Bloom Filter 参数
+/// Bloom filter parameters
 const BLOOM_EXPECTED_ITEMS: u32 = 10000;
 const BLOOM_FPR: f64 = 0.01;
-/// 固定 hash 函数数量 (根据 expected_items 和 fpr 计算: k = -ln(fpr) / ln(2) ≈ 7)
+/// Fixed hash count (derived from expected_items and fpr: k = -ln(fpr) / ln(2) ≈ 7).
 const BLOOM_HASHES: u32 = 7;
 
 pub struct Storage {
@@ -23,8 +23,10 @@ impl Storage {
         let db = sled::open(path).context("Failed to open sled database")?;
         let users_tree = db.open_tree("users").context("Failed to open users tree")?;
         let items_tree = db.open_tree("items").context("Failed to open items tree")?;
-        let history_tree = db.open_tree("history").context("Failed to open history tree")?;
-        
+        let history_tree = db
+            .open_tree("history")
+            .context("Failed to open history tree")?;
+
         Ok(Self {
             _db: db,
             users_tree,
@@ -38,11 +40,13 @@ impl Storage {
     }
 
     // ========== User CRUD ==========
-    
+
     pub fn save_user(&self, user: &User) -> Result<()> {
         let key = Self::u64_to_key(user.id);
         let value = bincode::serialize(user).context("Failed to serialize user")?;
-        self.users_tree.insert(key, value).context("Failed to insert user")?;
+        self.users_tree
+            .insert(key, value)
+            .context("Failed to insert user")?;
         Ok(())
     }
 
@@ -72,7 +76,9 @@ impl Storage {
     pub fn save_item(&self, item: &Item) -> Result<()> {
         let key = Self::u64_to_key(item.id);
         let value = bincode::serialize(item).context("Failed to serialize item")?;
-        self.items_tree.insert(key, value).context("Failed to insert item")?;
+        self.items_tree
+            .insert(key, value)
+            .context("Failed to insert item")?;
         Ok(())
     }
 
@@ -102,38 +108,50 @@ impl Storage {
         self.users_tree.len()
     }
 
-    // ========== Bloom Filter (用户历史去重) ==========
+    // ========== Bloom Filter (user history deduplication) ==========
 
-    /// 创建一个新的空 Bloom Filter
+    /// Create a new empty bloom filter.
     fn new_bloom_filter() -> BloomFilter {
         FilterBuilder::new(BLOOM_EXPECTED_ITEMS as u64, BLOOM_FPR).build_bloom_filter()
     }
 
-    /// 获取用户的 Bloom Filter（若不存在则返回新空过滤器）
+    /// Get a user's bloom filter (returns a fresh empty one if absent).
     pub fn get_user_filter(&self, uid: u64) -> Result<BloomFilter> {
         let key = Self::u64_to_key(uid);
-        match self.history_tree.get(key).context("Failed to get history")? {
+        match self
+            .history_tree
+            .get(key)
+            .context("Failed to get history")?
+        {
             Some(bytes) => {
-                // 从字节数组还原 BloomFilter
+                // Restore bloom filter from raw bytes.
                 Ok(BloomFilter::from_u8_array(&bytes, BLOOM_HASHES))
             }
             None => Ok(Self::new_bloom_filter()),
         }
     }
 
-    /// 保存用户的 Bloom Filter
+    /// Save a user's bloom filter.
     pub fn save_user_filter(&self, uid: u64, filter: &BloomFilter) -> Result<()> {
         let key = Self::u64_to_key(uid);
         let bytes = filter.get_u8_array();
-        self.history_tree.insert(key, bytes).context("Failed to save history")?;
+        self.history_tree
+            .insert(key, bytes)
+            .context("Failed to save history")?;
         Ok(())
     }
 
-    /// 强制刷新数据到磁盘
+    /// Force flush data to disk.
     pub fn flush(&self) -> Result<()> {
-        self.users_tree.flush().context("Failed to flush users tree")?;
-        self.items_tree.flush().context("Failed to flush items tree")?;
-        self.history_tree.flush().context("Failed to flush history tree")?;
+        self.users_tree
+            .flush()
+            .context("Failed to flush users tree")?;
+        self.items_tree
+            .flush()
+            .context("Failed to flush items tree")?;
+        self.history_tree
+            .flush()
+            .context("Failed to flush history tree")?;
         Ok(())
     }
 }

@@ -1,10 +1,10 @@
-//! Embedding 模块 - 使用 ONNX Runtime 进行语义向量化
+//! Embedding module: semantic vectorization via ONNX Runtime
 
 use anyhow::{Context, Result};
 use ndarray::{Array1, Array2};
+use ort::inputs;
 use ort::session::Session;
 use ort::value::Value;
-use ort::inputs;
 use std::sync::Mutex;
 use tokenizers::Tokenizer;
 
@@ -19,7 +19,7 @@ pub struct EmbeddingModel {
 
 impl EmbeddingModel {
     pub fn new() -> Result<Self> {
-        // 初始化 Session
+        // Initialize session
         let session = Session::builder()?
             .with_intra_threads(4)?
             .commit_from_file(MODEL_PATH)
@@ -28,29 +28,41 @@ impl EmbeddingModel {
         let tokenizer = Tokenizer::from_file(TOKENIZER_PATH)
             .map_err(|e| anyhow::anyhow!("Failed to load tokenizer: {}", e))?;
 
-        Ok(Self { session: Mutex::new(session), tokenizer })
+        Ok(Self {
+            session: Mutex::new(session),
+            tokenizer,
+        })
     }
 
-    /// 将文本编码为语义向量 (384 维)
+    /// Encode text into a semantic vector (384-dim).
     pub fn encode(&self, text: &str) -> Result<Vec<f32>> {
         // Step A: Tokenize
-        let encoding = self.tokenizer
+        let encoding = self
+            .tokenizer
             .encode(text, true)
             .map_err(|e| anyhow::anyhow!("Tokenization failed: {}", e))?;
 
         let input_ids: Vec<i64> = encoding.get_ids().iter().map(|&x| x as i64).collect();
-        let attention_mask: Vec<i64> = encoding.get_attention_mask().iter().map(|&x| x as i64).collect();
+        let attention_mask: Vec<i64> = encoding
+            .get_attention_mask()
+            .iter()
+            .map(|&x| x as i64)
+            .collect();
         let token_type_ids: Vec<i64> = encoding.get_type_ids().iter().map(|&x| x as i64).collect();
 
         let seq_len = input_ids.len();
 
-        // Step B: 构建输入张量
+        // Step B: build input tensors
         let input_ids_val = Value::from_array((vec![1usize, seq_len], input_ids))?;
-        let attention_mask_val = Value::from_array((vec![1usize, seq_len], attention_mask.clone()))?;
+        let attention_mask_val =
+            Value::from_array((vec![1usize, seq_len], attention_mask.clone()))?;
         let token_type_ids_val = Value::from_array((vec![1usize, seq_len], token_type_ids))?;
 
-        // Step C: 运行推理
-        let mut session = self.session.lock().map_err(|_| anyhow::anyhow!("Failed to lock ONNX session"))?;
+        // Step C: run inference
+        let mut session = self
+            .session
+            .lock()
+            .map_err(|_| anyhow::anyhow!("Failed to lock ONNX session"))?;
         let outputs = session.run(inputs![
             "input_ids" => input_ids_val,
             "attention_mask" => attention_mask_val,
@@ -58,15 +70,12 @@ impl EmbeddingModel {
         ])?;
 
         // Step D: Mean Pooling
-        // ort 2.0 rc.9 try_extract_tensor 返回 (Shape, &[T])
+        // ort 2.0 rc.9 try_extract_tensor returns (Shape, &[T])
         let (_, output_data) = outputs[0]
             .try_extract_tensor::<f32>()
             .context("Failed to extract output tensor")?;
-        
-        let hidden_states = Array2::from_shape_vec(
-            (seq_len, EMBEDDING_DIM),
-            output_data.to_vec()
-        )?;
+
+        let hidden_states = Array2::from_shape_vec((seq_len, EMBEDDING_DIM), output_data.to_vec())?;
 
         let mask: Array1<f32> = attention_mask.iter().map(|&x| x as f32).collect();
         let mask_sum = mask.sum();
@@ -74,12 +83,12 @@ impl EmbeddingModel {
         let mut pooled = Array1::<f32>::zeros(EMBEDDING_DIM);
         for (i, &m) in mask.iter().enumerate() {
             if m > 0.0 {
-                pooled = pooled + &hidden_states.row(i).to_owned();
+                pooled += &hidden_states.row(i).to_owned();
             }
         }
-        pooled = pooled / mask_sum;
+        pooled /= mask_sum;
 
-        // Step E: L2 归一化
+        // Step E: L2 normalization
         let norm: f32 = pooled.iter().map(|x| x * x).sum::<f32>().sqrt();
         let normalized: Vec<f32> = pooled.iter().map(|x| x / norm).collect();
 

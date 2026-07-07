@@ -1,31 +1,36 @@
-//! FFI 接口定义与 Safe Wrapper
+//! FFI bindings and safe wrappers.
 //!
-//! 这个模块是 Rust 与 C++ 交互的边界层。
-//! 所有的 `unsafe` 代码都集中在这里，业务层不应该直接接触 unsafe。
+//! This module is the boundary between Rust and C++.
+//! All `unsafe` code lives here; business logic must not call unsafe directly.
 
 use crate::model::Item;
 use libc::{c_float, c_int};
 
 // ============================================================================
-// 外部 C 函数声明 (Raw FFI Bindings)
+// External C function declarations (raw FFI bindings)
 // ============================================================================
 
 extern "C" {
-    // 基础运算
+    // Basic math
     fn cpp_add(a: c_int, b: c_int) -> c_int;
     fn dot_product(vec_a: *const c_float, vec_b: *const c_float, len: c_int) -> c_float;
 
-    // HNSW 索引操作
+    // HNSW index operations
     fn hnsw_init(dim: c_int, max_elements: c_int, M: c_int, ef_construction: c_int) -> c_int;
     fn hnsw_add_item(id: c_int, vector: *const c_float) -> c_int;
     fn hnsw_set_ef(ef: c_int);
-    fn hnsw_search_knn(query: *const c_float, k: c_int, out_ids: *mut c_int, out_scores: *mut c_float) -> c_int;
+    fn hnsw_search_knn(
+        query: *const c_float,
+        k: c_int,
+        out_ids: *mut c_int,
+        out_scores: *mut c_float,
+    ) -> c_int;
     fn hnsw_destroy();
     fn hnsw_get_count() -> c_int;
     fn hnsw_save_index(path: *const libc::c_char) -> c_int;
     fn hnsw_load_index(path: *const libc::c_char, dim: c_int, max_elements: c_int) -> c_int;
 
-    // 旧版暴力搜索
+    // Legacy brute-force search
     fn search_top_k(
         query_vec: *const c_float,
         item_matrix: *const c_float,
@@ -39,11 +44,11 @@ extern "C" {
 }
 
 // ============================================================================
-// 基础运算 Safe Wrapper
+// Basic math safe wrappers
 // ============================================================================
 
 pub fn add(a: i32, b: i32) -> i32 {
-    // SAFETY: cpp_add 是纯函数，c_int 与 i32 兼容
+    // SAFETY: cpp_add is a pure function; c_int is compatible with i32.
     unsafe { cpp_add(a, b) }
 }
 
@@ -52,29 +57,29 @@ pub fn compute_dot_product(vec_a: &[f32], vec_b: &[f32]) -> Option<f32> {
         return None;
     }
     let len = vec_a.len() as c_int;
-    // SAFETY: 切片在调用期间有效，as_ptr() 返回有效指针，len 正确
+    // SAFETY: slices are valid for the call; as_ptr() and len are correct.
     let result = unsafe { dot_product(vec_a.as_ptr(), vec_b.as_ptr(), len) };
     Some(result)
 }
 
 // ============================================================================
-// HNSW 索引 Safe Wrapper
+// HNSW index safe wrappers
 // ============================================================================
 
-/// HNSW 索引配置
+/// HNSW index configuration.
 pub struct HnswConfig {
-    /// 向量维度
+    /// Vector dimension.
     pub dim: usize,
-    /// 最大元素数量
+    /// Maximum number of elements.
     pub max_elements: usize,
-    /// 每个节点的最大连接数 (影响精度和内存)
-    /// 推荐值: 16 (平衡), 32-64 (高精度)
+    /// Max connections per node (affects accuracy and memory).
+    /// Recommended: 16 (balanced), 32-64 (high accuracy).
     pub m: usize,
-    /// 构建时的搜索深度 (影响索引质量)
-    /// 推荐值: 200
+    /// Search depth during index build (affects index quality).
+    /// Recommended: 200.
     pub ef_construction: usize,
-    /// 查询时的搜索深度 (影响召回率)
-    /// 推荐值: 50-100, 必须 >= k
+    /// Search depth at query time (affects recall).
+    /// Recommended: 50-100, must be >= k.
     pub ef_search: usize,
 }
 
@@ -90,16 +95,16 @@ impl Default for HnswConfig {
     }
 }
 
-/// 初始化 HNSW 索引
-/// 
+/// Initialize the HNSW index.
+///
 /// # Arguments
-/// * `config` - HNSW 配置参数
-/// 
+/// * `config` - HNSW configuration.
+///
 /// # Returns
-/// * `Ok(())` - 初始化成功
-/// * `Err(String)` - 初始化失败
+/// * `Ok(())` - initialization succeeded.
+/// * `Err(String)` - initialization failed.
 pub fn init_hnsw_index(config: &HnswConfig) -> Result<(), String> {
-    // SAFETY: 所有参数都是基本类型，无指针操作
+    // SAFETY: all arguments are plain scalars; no pointer operations.
     let result = unsafe {
         hnsw_init(
             config.dim as c_int,
@@ -110,7 +115,7 @@ pub fn init_hnsw_index(config: &HnswConfig) -> Result<(), String> {
     };
 
     if result == 0 {
-        // 设置查询时的搜索深度
+        // Set query-time search depth.
         unsafe { hnsw_set_ef(config.ef_search as c_int) };
         Ok(())
     } else {
@@ -118,17 +123,17 @@ pub fn init_hnsw_index(config: &HnswConfig) -> Result<(), String> {
     }
 }
 
-/// 向索引添加单个物品
-/// 
+/// Add a single item to the index.
+///
 /// # Arguments
-/// * `id` - 物品 ID
-/// * `embedding` - 物品向量
-/// 
+/// * `id` - item ID.
+/// * `embedding` - item vector.
+///
 /// # Returns
-/// * `Ok(())` - 添加成功
-/// * `Err(String)` - 添加失败
+/// * `Ok(())` - add succeeded.
+/// * `Err(String)` - add failed.
 pub fn add_item_to_hnsw(id: u64, embedding: &[f32]) -> Result<(), String> {
-    // SAFETY: embedding 是有效切片，在调用期间不会被释放
+    // SAFETY: embedding is a valid slice for the duration of the call.
     let result = unsafe { hnsw_add_item(id as c_int, embedding.as_ptr()) };
 
     if result == 0 {
@@ -138,14 +143,14 @@ pub fn add_item_to_hnsw(id: u64, embedding: &[f32]) -> Result<(), String> {
     }
 }
 
-/// 使用 HNSW 索引搜索最近邻
-/// 
+/// Search nearest neighbors with the HNSW index.
+///
 /// # Arguments
-/// * `query` - 查询向量
-/// * `k` - 返回的最近邻数量
-/// 
+/// * `query` - query vector.
+/// * `k` - number of neighbors to return.
+///
 /// # Returns
-/// 返回 (item_id, similarity_score) 的列表，按相似度降序排列
+/// List of `(item_id, similarity_score)` sorted by similarity descending.
 pub fn hnsw_search(query: &[f32], k: usize) -> Vec<(u64, f32)> {
     if k == 0 {
         return Vec::new();
@@ -155,8 +160,8 @@ pub fn hnsw_search(query: &[f32], k: usize) -> Vec<(u64, f32)> {
     let mut out_scores: Vec<f32> = vec![0.0; k];
 
     // SAFETY:
-    // 1. query 是有效切片，在调用期间有效
-    // 2. out_ids/out_scores 已预分配足够空间
+    // 1. query is a valid slice for the duration of the call.
+    // 2. out_ids/out_scores are preallocated with sufficient capacity.
     let count = unsafe {
         hnsw_search_knn(
             query.as_ptr(),
@@ -175,26 +180,26 @@ pub fn hnsw_search(query: &[f32], k: usize) -> Vec<(u64, f32)> {
         .collect()
 }
 
-/// 销毁 HNSW 索引并释放内存
+/// Destroy the HNSW index and free memory.
 pub fn destroy_hnsw_index() {
-    // SAFETY: 无需传递参数，仅释放全局索引
+    // SAFETY: no arguments; releases the global index only.
     unsafe { hnsw_destroy() };
 }
 
-/// 获取索引中的元素数量
+/// Return the number of elements in the index.
 pub fn get_hnsw_count() -> usize {
-    // SAFETY: 无参数，返回值是基本类型
+    // SAFETY: no arguments; return value is a plain scalar.
     unsafe { hnsw_get_count() as usize }
 }
 
-/// 保存索引到文件
+/// Save the index to a file.
 pub fn save_hnsw_index(path: &str) -> Result<(), String> {
     use std::ffi::CString;
     let c_path = CString::new(path).map_err(|_| "Invalid path".to_string())?;
-    
-    // SAFETY: c_path 是有效的以 null 结尾的 C 字符串
+
+    // SAFETY: c_path is a valid null-terminated C string.
     let result = unsafe { hnsw_save_index(c_path.as_ptr()) };
-    
+
     if result == 0 {
         Ok(())
     } else {
@@ -202,25 +207,28 @@ pub fn save_hnsw_index(path: &str) -> Result<(), String> {
     }
 }
 
-/// 加载索引 (若文件不存在则创建新索引)
-/// 返回: Ok(true) = 已加载, Ok(false) = 创建了新索引, Err = 失败
-pub fn load_hnsw_index(path: &str, dim: usize, max_elements: usize, ef_search: usize) -> Result<bool, String> {
+/// Load an index (creates a new one if the file is missing).
+/// Returns: Ok(true) = loaded, Ok(false) = created new index, Err = failure.
+pub fn load_hnsw_index(
+    path: &str,
+    dim: usize,
+    max_elements: usize,
+    ef_search: usize,
+) -> Result<bool, String> {
     use std::ffi::CString;
     let c_path = CString::new(path).map_err(|_| "Invalid path".to_string())?;
-    
-    // SAFETY: c_path 是有效的以 null 结尾的 C 字符串
-    let result = unsafe { 
-        hnsw_load_index(c_path.as_ptr(), dim as c_int, max_elements as c_int) 
-    };
-    
+
+    // SAFETY: c_path is a valid null-terminated C string.
+    let result = unsafe { hnsw_load_index(c_path.as_ptr(), dim as c_int, max_elements as c_int) };
+
     match result {
         0 => {
-            // 加载成功，设置 ef_search
+            // Loaded successfully; set ef_search.
             unsafe { hnsw_set_ef(ef_search as c_int) };
             Ok(true)
         }
         1 => {
-            // 创建了新索引
+            // Created a new index.
             unsafe { hnsw_set_ef(ef_search as c_int) };
             Ok(false)
         }
@@ -229,10 +237,10 @@ pub fn load_hnsw_index(path: &str, dim: usize, max_elements: usize, ef_search: u
 }
 
 // ============================================================================
-// 旧版暴力搜索 (Legacy)
+// Legacy brute-force search
 // ============================================================================
 
-/// 召回阶段：从物品库中找出与用户最相似的 Top K 物品 (暴力搜索)
+/// Recall phase: find top-k items most similar to the user (brute force).
 pub fn recommend_recall(user_embedding: &[f32], items: &[Item], k: usize) -> Vec<(u64, f32)> {
     if items.is_empty() || k == 0 {
         return Vec::new();
@@ -252,7 +260,7 @@ pub fn recommend_recall(user_embedding: &[f32], items: &[Item], k: usize) -> Vec
     let mut out_ids: Vec<c_int> = vec![0; actual_k];
     let mut out_scores: Vec<f32> = vec![0.0; actual_k];
 
-    // SAFETY: 所有指针和长度参数都经过验证
+    // SAFETY: all pointer and length arguments have been validated.
     let count = unsafe {
         search_top_k(
             user_embedding.as_ptr(),
@@ -272,7 +280,7 @@ pub fn recommend_recall(user_embedding: &[f32], items: &[Item], k: usize) -> Vec
 }
 
 // ============================================================================
-// 单元测试
+// Unit tests
 // ============================================================================
 
 #[cfg(test)]
@@ -296,7 +304,7 @@ mod tests {
 
     #[test]
     fn test_hnsw_lifecycle() {
-        // 初始化
+        // Initialize.
         let config = HnswConfig {
             dim: 3,
             max_elements: 100,
@@ -306,20 +314,20 @@ mod tests {
         };
         assert!(init_hnsw_index(&config).is_ok());
 
-        // 添加向量
+        // Add vectors.
         assert!(add_item_to_hnsw(1, &[1.0, 0.0, 0.0]).is_ok());
         assert!(add_item_to_hnsw(2, &[0.0, 1.0, 0.0]).is_ok());
         assert!(add_item_to_hnsw(3, &[0.5, 0.5, 0.0]).is_ok());
 
         assert_eq!(get_hnsw_count(), 3);
 
-        // 搜索
+        // Search.
         let results = hnsw_search(&[1.0, 0.0, 0.0], 2);
         assert_eq!(results.len(), 2);
-        // 第一个结果应该是 ID=1 (完全匹配)
+        // First result should be ID=1 (exact match).
         assert_eq!(results[0].0, 1);
 
-        // 销毁
+        // Tear down.
         destroy_hnsw_index();
         assert_eq!(get_hnsw_count(), 0);
     }

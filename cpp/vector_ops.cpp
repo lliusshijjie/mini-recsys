@@ -1,30 +1,30 @@
-// vector_ops.cpp - C++ 向量运算与 HNSW 索引实现
+// vector_ops.cpp - C++ vector operations and HNSW index implementation
 //
-// 本文件包含:
-// 1. 基础向量运算 (dot_product, cpp_add)
-// 2. HNSW 索引封装 (使用 hnswlib)
-// 3. 旧版暴力搜索 (search_top_k) - 保持向后兼容
+// This file contains:
+// 1. Basic vector math (dot_product, cpp_add)
+// 2. HNSW index wrapper (hnswlib)
+// 3. Legacy brute-force search (search_top_k) for backward compatibility
 
 #include "vector_ops.h"
 #include "hnswlib/hnswlib.h"
-#include "hnswlib/space_ip.h"  // InnerProductSpace (内积空间)
+#include "hnswlib/space_ip.h"  // InnerProductSpace
 #include <algorithm>
 #include <vector>
 #include <mutex>
 
 // ============================================================================
-// 全局 HNSW 索引
+// Global HNSW index
 // ============================================================================
 
-// 索引指针 - 使用内积空间 (Inner Product Space)
-// 内积空间适合归一化向量的相似度计算: distance = 1 - dot_product
+// Index pointer using inner-product space.
+// Inner product suits normalized vectors: distance = 1 - dot_product.
 static hnswlib::HierarchicalNSW<float>* g_hnsw_index = nullptr;
 static hnswlib::InnerProductSpace* g_space = nullptr;
 static int g_dim = 0;
-static std::mutex g_mutex;  // 线程安全
+static std::mutex g_mutex;  // Thread safety
 
 // ============================================================================
-// 基础向量运算实现
+// Basic vector operations
 // ============================================================================
 
 extern "C" int cpp_add(int a, int b) {
@@ -40,13 +40,13 @@ extern "C" float dot_product(const float* vec_a, const float* vec_b, int len) {
 }
 
 // ============================================================================
-// HNSW 索引实现
+// HNSW index implementation
 // ============================================================================
 
 extern "C" int hnsw_init(int dim, int max_elements, int M, int ef_construction) {
     std::lock_guard<std::mutex> lock(g_mutex);
-    
-    // 清理旧索引
+
+    // Tear down any existing index.
     if (g_hnsw_index != nullptr) {
         delete g_hnsw_index;
         g_hnsw_index = nullptr;
@@ -55,40 +55,38 @@ extern "C" int hnsw_init(int dim, int max_elements, int M, int ef_construction) 
         delete g_space;
         g_space = nullptr;
     }
-    
+
     try {
         g_dim = dim;
-        // 使用内积空间 (Inner Product Space)
-        // 对于归一化向量: distance = 1 - inner_product
-        // 所以 distance 越小 = similarity 越高
+        // Inner product space: for normalized vectors, distance = 1 - inner_product.
+        // Lower distance means higher similarity.
         g_space = new hnswlib::InnerProductSpace(dim);
-        
-        // 创建 HNSW 索引
-        // M: 每层的最大连接数 (影响图的密度)
-        // ef_construction: 构建时的动态列表大小 (影响索引质量)
+
+        // Create HNSW index.
+        // M: max connections per layer (graph density).
+        // ef_construction: dynamic list size during build (index quality).
         g_hnsw_index = new hnswlib::HierarchicalNSW<float>(
-            g_space, 
-            max_elements, 
-            M, 
+            g_space,
+            max_elements,
+            M,
             ef_construction
         );
-        
-        return 0;  // 成功
+
+        return 0;  // Success
     } catch (...) {
-        return -1;  // 失败
+        return -1;  // Failure
     }
 }
 
 extern "C" int hnsw_add_item(int id, const float* vector) {
     std::lock_guard<std::mutex> lock(g_mutex);
-    
+
     if (g_hnsw_index == nullptr) {
-        return -1;  // 索引未初始化
+        return -1;  // Index not initialized
     }
-    
+
     try {
-        // 添加向量到索引
-        // label 使用 id 作为标识符
+        // Add vector; use id as the label.
         g_hnsw_index->addPoint(vector, static_cast<hnswlib::labeltype>(id));
         return 0;
     } catch (...) {
@@ -98,46 +96,46 @@ extern "C" int hnsw_add_item(int id, const float* vector) {
 
 extern "C" void hnsw_set_ef(int ef) {
     std::lock_guard<std::mutex> lock(g_mutex);
-    
+
     if (g_hnsw_index != nullptr) {
-        // ef: 查询时的动态列表大小
-        // 更高的 ef = 更好的召回率，但查询更慢
+        // ef: dynamic list size at query time.
+        // Higher ef = better recall, slower queries.
         g_hnsw_index->setEf(ef);
     }
 }
 
 extern "C" int hnsw_search_knn(const float* query, int k, int* out_ids, float* out_scores) {
     std::lock_guard<std::mutex> lock(g_mutex);
-    
+
     if (g_hnsw_index == nullptr) {
         return -1;
     }
-    
+
     try {
-        // 搜索 K 个最近邻
-        // 返回 priority_queue<pair<distance, label>>
+        // Search k nearest neighbors.
+        // Returns priority_queue<pair<distance, label>>.
         auto result = g_hnsw_index->searchKnn(query, k);
-        
+
         int count = 0;
-        // 结果按距离从大到小排列，我们需要反转
+        // Results are ordered by distance descending; reverse them.
         std::vector<std::pair<float, hnswlib::labeltype>> results;
         while (!result.empty()) {
             results.push_back(result.top());
             result.pop();
         }
-        
-        // 反转得到从小到大 (最相似在前)
+
+        // Reverse to ascending distance (most similar first).
         std::reverse(results.begin(), results.end());
-        
+
         for (const auto& item : results) {
-            // 对于内积空间: distance = 1 - inner_product
-            // 所以 similarity = 1 - distance = inner_product
+            // Inner product space: distance = 1 - inner_product.
+            // similarity = 1 - distance = inner_product.
             float similarity = 1.0f - item.first;
             out_scores[count] = similarity;
             out_ids[count] = static_cast<int>(item.second);
             count++;
         }
-        
+
         return count;
     } catch (...) {
         return -1;
@@ -146,7 +144,7 @@ extern "C" int hnsw_search_knn(const float* query, int k, int* out_ids, float* o
 
 extern "C" void hnsw_destroy() {
     std::lock_guard<std::mutex> lock(g_mutex);
-    
+
     if (g_hnsw_index != nullptr) {
         delete g_hnsw_index;
         g_hnsw_index = nullptr;
@@ -160,7 +158,7 @@ extern "C" void hnsw_destroy() {
 
 extern "C" int hnsw_get_count() {
     std::lock_guard<std::mutex> lock(g_mutex);
-    
+
     if (g_hnsw_index == nullptr) {
         return 0;
     }
@@ -169,11 +167,11 @@ extern "C" int hnsw_get_count() {
 
 extern "C" int hnsw_save_index(const char* path) {
     std::lock_guard<std::mutex> lock(g_mutex);
-    
+
     if (g_hnsw_index == nullptr) {
-        return -1;  // 索引未初始化
+        return -1;  // Index not initialized
     }
-    
+
     try {
         g_hnsw_index->saveIndex(std::string(path));
         return 0;
@@ -184,8 +182,8 @@ extern "C" int hnsw_save_index(const char* path) {
 
 extern "C" int hnsw_load_index(const char* path, int dim, int max_elements) {
     std::lock_guard<std::mutex> lock(g_mutex);
-    
-    // 清理旧索引
+
+    // Tear down any existing index.
     if (g_hnsw_index != nullptr) {
         delete g_hnsw_index;
         g_hnsw_index = nullptr;
@@ -194,30 +192,30 @@ extern "C" int hnsw_load_index(const char* path, int dim, int max_elements) {
         delete g_space;
         g_space = nullptr;
     }
-    
+
     try {
         g_dim = dim;
         g_space = new hnswlib::InnerProductSpace(dim);
-        
-        // 尝试从文件加载
+
+        // Try loading from file.
         FILE* f = fopen(path, "rb");
         if (f != nullptr) {
             fclose(f);
-            // 文件存在，加载索引
+            // File exists; load index.
             g_hnsw_index = new hnswlib::HierarchicalNSW<float>(g_space, std::string(path));
-            return 0;  // 成功加载
+            return 0;  // Loaded successfully
         } else {
-            // 文件不存在，创建新索引
+            // File missing; create a new index.
             g_hnsw_index = new hnswlib::HierarchicalNSW<float>(g_space, max_elements, 16, 200);
-            return 1;  // 创建了新索引
+            return 1;  // Created new index
         }
     } catch (...) {
-        return -1;  // 失败
+        return -1;  // Failure
     }
 }
 
 // ============================================================================
-// 旧版暴力搜索 (Legacy Brute-force Search)
+// Legacy brute-force search
 // ============================================================================
 
 extern "C" int search_top_k(
@@ -231,28 +229,28 @@ extern "C" int search_top_k(
     float* out_scores
 ) {
     if (rows <= 0 || k <= 0) return 0;
-    
+
     int actual_k = std::min(k, rows);
-    
+
     std::vector<std::pair<float, int>> scores(rows);
-    
+
     for (int i = 0; i < rows; ++i) {
         const float* row_ptr = item_matrix + i * cols;
         float score = dot_product(query_vec, row_ptr, cols);
         scores[i] = {score, item_ids[i]};
     }
-    
+
     std::partial_sort(
         scores.begin(),
         scores.begin() + actual_k,
         scores.end(),
         [](const auto& a, const auto& b) { return a.first > b.first; }
     );
-    
+
     for (int i = 0; i < actual_k; ++i) {
         out_ids[i] = scores[i].second;
         out_scores[i] = scores[i].first;
     }
-    
+
     return actual_k;
 }

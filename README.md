@@ -35,7 +35,7 @@ graph TD
         BL["Bloom Filter\nSeen-Item Dedup"]
         SC["Coarse Ranking\nsim×0.7 + popularity×0.3"]
         RRF["RRF Merge\nscore = 1 / (60 + rank)"]
-        FB["Popularity Fallback\n补足 Top-5"]
+        FB["Popularity Fallback\nFill Top-5"]
     end
 
     subgraph Storage["Storage: Sled KV DB"]
