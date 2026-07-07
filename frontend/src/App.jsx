@@ -79,6 +79,8 @@ function App() {
     }
 
     const getCategoryStyle = (cat) => CATEGORY_COLORS[cat] || CATEGORY_COLORS.Electronics
+    const formatReason = (reason) => (reason || 'recommended').replaceAll('_', ' ')
+    const formatSource = (source) => source || 'unknown'
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -199,19 +201,40 @@ function App() {
                                         </h3>
                                         <p className="text-xl font-bold text-green-400 mb-3">${item.price.toFixed(2)}</p>
 
+                                        <div className="mb-3 flex flex-wrap gap-2 text-xs">
+                                            <span className="px-2 py-1 rounded bg-slate-900/70 text-slate-300 border border-slate-700">
+                                                {formatSource(item.source)}
+                                            </span>
+                                            <span className="px-2 py-1 rounded bg-slate-900/70 text-blue-300 border border-slate-700">
+                                                {formatReason(item.reason)}
+                                            </span>
+                                        </div>
+
                                         {/* Scores */}
-                                        <div className="grid grid-cols-3 gap-2 text-center bg-slate-900/50 rounded-lg p-2">
+                                        <div className="grid grid-cols-2 gap-2 text-center bg-slate-900/50 rounded-lg p-2">
                                             <div>
                                                 <p className="text-[10px] text-slate-500">Final</p>
-                                                <p className="text-sm font-bold text-green-400">{item.final_score.toFixed(4)}</p>
+                                                <p className="text-sm font-bold text-green-400">{(item.final_score ?? 0).toFixed(4)}</p>
                                             </div>
                                             <div>
                                                 <p className="text-[10px] text-slate-500">Sim</p>
-                                                <p className="text-sm font-medium text-blue-400">{item.sim_score.toFixed(4)}</p>
+                                                <p className="text-sm font-medium text-blue-400">{(item.sim_score ?? 0).toFixed(4)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] text-slate-500">Cat</p>
+                                                <p className="text-sm font-medium text-amber-400">{(item.category_score ?? 0).toFixed(4)}</p>
                                             </div>
                                             <div>
                                                 <p className="text-[10px] text-slate-500">Pop</p>
-                                                <p className="text-sm font-medium text-purple-400">{item.popularity.toFixed(4)}</p>
+                                                <p className="text-sm font-medium text-purple-400">{(item.popularity ?? 0).toFixed(4)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] text-slate-500">Price</p>
+                                                <p className="text-sm font-medium text-cyan-400">{(item.price_affinity ?? 0).toFixed(4)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] text-slate-500">Novel</p>
+                                                <p className="text-sm font-medium text-pink-400">{(item.novelty ?? 0).toFixed(4)}</p>
                                             </div>
                                         </div>
                                     </div>

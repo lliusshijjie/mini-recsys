@@ -1,4 +1,4 @@
-//! 数据模型定义
+//! Data model definitions.
 
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -12,7 +12,7 @@ pub struct User {
     pub embedding: Vec<f32>,
 }
 
-/// 用于从 JSON 加载的临时结构（不含 embedding 和 popularity）
+/// Temporary struct for JSON loading (no embedding or popularity).
 #[derive(Debug, Deserialize)]
 pub struct ItemJson {
     pub id: u64,
@@ -23,7 +23,7 @@ pub struct ItemJson {
     pub price: f32,
 }
 
-/// 完整的 Item 结构（用于存储和运行时）
+/// Full item struct for storage and runtime use.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Item {
     pub id: u64,
@@ -62,7 +62,7 @@ impl Item {
     }
 }
 
-/// 类别锚点向量
+/// Category anchor vector.
 pub fn category_base_vector(category: &str) -> Vec<f32> {
     let mut vec = vec![0.0f32; DIM];
     let range = match category {
@@ -81,7 +81,8 @@ pub fn category_base_vector(category: &str) -> Vec<f32> {
 pub fn generate_category_embedding(category: &str) -> Vec<f32> {
     let mut rng = rand::thread_rng();
     let base = category_base_vector(category);
-    let vec: Vec<f32> = base.iter()
+    let vec: Vec<f32> = base
+        .iter()
         .map(|&v| v + rng.gen::<f32>() * 0.2 - 0.1)
         .collect();
     let norm: f32 = vec.iter().map(|x| x * x).sum::<f32>().sqrt();
@@ -97,14 +98,15 @@ pub fn generate_user_embedding(categories: &[&str]) -> Vec<f32> {
             combined[i] += v;
         }
     }
-    let vec: Vec<f32> = combined.iter()
+    let vec: Vec<f32> = combined
+        .iter()
         .map(|&v| v + rng.gen::<f32>() * 0.1 - 0.05)
         .collect();
     let norm: f32 = vec.iter().map(|x| x * x).sum::<f32>().sqrt();
     vec.into_iter().map(|x| x / norm).collect()
 }
 
-/// 生成完全随机的向量 (用于噪声用户)
+/// Generate a fully random vector (for cold-start/noise users).
 pub fn generate_random_embedding() -> Vec<f32> {
     let mut rng = rand::thread_rng();
     let vec: Vec<f32> = (0..DIM).map(|_| rng.gen::<f32>() * 2.0 - 1.0).collect();
