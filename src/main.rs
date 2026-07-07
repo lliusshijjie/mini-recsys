@@ -241,6 +241,16 @@ async fn search_handler(
     State(state): State<Arc<AppState>>,
     Query(params): Query<SearchQuery>,
 ) -> Result<Json<SearchResponse>, (StatusCode, Json<ErrorResponse>)> {
+    if contains_cjk_text(&params.q) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "Semantic search only supports English text with the current MiniLM model"
+                    .to_string(),
+            }),
+        ));
+    }
+
     let model = state.embedding_model.as_ref().ok_or_else(|| {
         (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -314,6 +324,32 @@ async fn health_handler() -> &'static str {
     "OK"
 }
 
+fn contains_cjk_text(text: &str) -> bool {
+    text.chars().any(|ch| {
+        matches!(
+            ch,
+            '\u{3400}'..='\u{4DBF}'
+                | '\u{4E00}'..='\u{9FFF}'
+                | '\u{F900}'..='\u{FAFF}'
+                | '\u{20000}'..='\u{2A6DF}'
+                | '\u{2A700}'..='\u{2B73F}'
+                | '\u{2B740}'..='\u{2B81F}'
+                | '\u{2B820}'..='\u{2CEAF}'
+        )
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detects_cjk_text_as_unsupported_search_input() {
+        assert!(contains_cjk_text("wireless mouse \u{9F20}\u{6807}"));
+        assert!(!contains_cjk_text("wireless mouse"));
+    }
+}
+
 // ============================================================================
 // Data initialization
 // ============================================================================
@@ -323,55 +359,55 @@ fn init_users() -> Vec<User> {
         // Single-interest users.
         User {
             id: 1,
-            name: "程序员小明 (Electronics + Books)".into(),
+            name: "Dev Xiaoming (Electronics + Books)".into(),
             embedding: generate_user_embedding(&["Electronics", "Books"]),
         },
         User {
             id: 2,
-            name: "居家达人小红 (Home)".into(),
+            name: "Home Enthusiast Xiaohong (Home)".into(),
             embedding: generate_user_embedding(&["Home"]),
         },
         User {
             id: 3,
-            name: "时尚达人小美 (Clothing)".into(),
+            name: "Fashion Fan Xiaomei (Clothing)".into(),
             embedding: generate_user_embedding(&["Clothing"]),
         },
         // Dual-interest users.
         User {
             id: 4,
-            name: "极客玩家 (Electronics)".into(),
+            name: "Gadget Geek (Electronics)".into(),
             embedding: generate_user_embedding(&["Electronics"]),
         },
         User {
             id: 5,
-            name: "书虫 (Books)".into(),
+            name: "Bookworm (Books)".into(),
             embedding: generate_user_embedding(&["Books"]),
         },
         User {
             id: 6,
-            name: "生活家 (Home + Clothing)".into(),
+            name: "Lifestyle Maven (Home + Clothing)".into(),
             embedding: generate_user_embedding(&["Home", "Clothing"]),
         },
         // Multi-category users.
         User {
             id: 7,
-            name: "全能选手 (All Categories)".into(),
+            name: "All-Rounder (All Categories)".into(),
             embedding: generate_user_embedding(&["Electronics", "Books", "Home", "Clothing"]),
         },
         User {
             id: 8,
-            name: "科技宅 (Electronics + Home)".into(),
+            name: "Tech Homebody (Electronics + Home)".into(),
             embedding: generate_user_embedding(&["Electronics", "Home"]),
         },
         // Cold-start users with random embeddings.
         User {
             id: 9,
-            name: "新用户A (Random)".into(),
+            name: "New User A (Random)".into(),
             embedding: generate_random_embedding(),
         },
         User {
             id: 10,
-            name: "新用户B (Random)".into(),
+            name: "New User B (Random)".into(),
             embedding: generate_random_embedding(),
         },
     ]

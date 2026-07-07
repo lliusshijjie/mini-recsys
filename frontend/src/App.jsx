@@ -41,7 +41,7 @@ function App() {
             setFilteredCount(res.data.filtered_count || 0)
             setResponseTime((performance.now() - start).toFixed(0))
 
-            // 自动标记为已看
+            // Automatically mark displayed items as seen.
             const itemIds = res.data.recommendations.map(r => r.item_id)
             if (itemIds.length > 0) {
                 axios.post(`${API_BASE}/mark_seen`, {
