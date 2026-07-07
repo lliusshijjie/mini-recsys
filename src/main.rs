@@ -23,7 +23,7 @@ use model::{
     generate_category_embedding, generate_random_embedding, generate_user_embedding, Item,
     ItemJson, User, DIM,
 };
-use recommendation::{build_recommendations, RecommendationConfig};
+use recommendation::{build_recommendations, RankingStrategyKind, RecommendationConfig};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -69,6 +69,7 @@ struct RecommendItem {
     price_affinity: f32,
     novelty: f32,
     final_score: f32,
+    ranking_strategy: String,
     source: String,
     reason: String,
 }
@@ -155,7 +156,10 @@ async fn recommend_handler(
         &state.items,
         &semantic_hits,
         &|item_id| filter.contains(&item_id.to_le_bytes()),
-        RecommendationConfig::default(),
+        RecommendationConfig {
+            ranking_strategy: RankingStrategyKind::from_env(),
+            ..Default::default()
+        },
     );
 
     let recommendations = output
@@ -173,6 +177,7 @@ async fn recommend_handler(
             price_affinity: item.price_affinity,
             novelty: item.novelty,
             final_score: item.final_score,
+            ranking_strategy: item.ranking_strategy,
             source: item.source,
             reason: item.reason,
         })
@@ -308,6 +313,7 @@ async fn search_handler(
                 price_affinity: 0.0,
                 novelty: 0.0,
                 final_score: res.score,
+                ranking_strategy: "hybrid_search".to_string(),
                 source: "search".to_string(),
                 reason: "hybrid_search_match".to_string(),
             })
