@@ -1,102 +1,161 @@
-# Mini-RecSys: AI-Powered Hybrid Recommendation System
+# Mini-RecSys
 
-A high-performance recommendation system featuring a **Rust** web server, an **ONNX-driven AI** embedding engine, a **Tantivy-powered** text search engine, an **HNSW-powered (C++)** vector search engine, and a **Vite/React** frontend.
+Mini-RecSys is a lightweight recommendation-system MVP built with a Rust/Axum
+backend, a C++ HNSW vector-search layer, ONNX Runtime embeddings, Tantivy text
+search, Sled persistence, and a Vite/React frontend.
 
-## 🌟 Key Features
+The current backend implements an explainable Phase 1 recommendation pipeline:
 
--   **Hybrid Search**: Combines **Semantic Vector Search** (ONNX + HNSW) and **Keyword Search** (Tantivy) via **RRF (Reciprocal Rank Fusion)** algorithm.
--   **Semantic Search**: Real-time semantic vector search using ONNX Runtime (BERT `all-MiniLM-L6-v2`).
--   **Full-Text Search**: High-performance inverted index search powered by [Tantivy](https://github.com/quickwit-oss/tantivy).
--   **Hybrid Architecture**: Blends Rust's safety, C++'s search performance, and Python-trained models' intelligence.
--   **Full Persistence**: 
-    -   **Sled (KV Engine)**: Persists user/item metadata and popularity.
-    -   **HNSW & Tantivy**: Both vector and text indices are persisted for sub-second startup response.
--   **Smart Lifecycle**: Automatic index hydration from Sled and graceful index saving on shutdown.
-
-## 🏗️ System Architecture
-
-```mermaid
-graph TD
-    A["Frontend\nReact + Vite"]
-
-    subgraph Backend["Backend: Axum + Tokio"]
-        B1["GET /recommend"]
-        B2["GET /search"]
-        B3["POST /mark_seen"]
-    end
-
-    subgraph Engines["Search Engines"]
-        E["ONNX Runtime\nBERT all-MiniLM-L6-v2\n→ 384D Vector"]
-        C["HNSW Index (C++)\nhnswlib · ANN Search"]
-        F["Tantivy\nInverted Index · Keyword Search"]
-    end
-
-    subgraph Processing["Result Processing"]
-        BL["Bloom Filter\nSeen-Item Dedup"]
-        SC["Coarse Ranking\nsim×0.7 + popularity×0.3"]
-        RRF["RRF Merge\nscore = 1 / (60 + rank)"]
-        FB["Popularity Fallback\nFill Top-5"]
-    end
-
-    subgraph Storage["Storage: Sled KV DB"]
-        D1["users_tree\nUser + Embedding"]
-        D2["items_tree\nItem + Embedding"]
-        D3["history_tree\nBloom Filter bytes"]
-    end
-
-    A -->|uid| B1
-    A -->|query text| B2
-    A -->|item_ids| B3
-
-    B1 -->|user embedding| C
-    C -->|Top-100 candidates| BL
-    D3 -->|get_user_filter| BL
-    BL -->|unseen candidates| SC
-    SC -->|results < 5| FB
-    D2 -->|hot items| FB
-    SC --> A
-    FB --> A
-
-    B2 --> E
-    E -->|384D query vector| C
-    B2 -->|keywords| F
-    C -->|Top-50 vector hits| RRF
-    F -->|Top-50 keyword hits| RRF
-    RRF --> A
-
-    B3 -->|add item_id to filter| D3
-
-    D2 & D1 -.->|startup hydration| C
-    D2 -.->|startup hydration| F
+```text
+Recall -> Rank -> Rerank -> Explain
 ```
 
-## 🚀 Getting Started
+It is intentionally small and rule-driven. The project avoids large-scale model
+training infrastructure while keeping a clear extension point for future
+machine-learning ranking.
 
-### Prerequisites
+## Features
 
--   **Rust**: 1.75+
--   **C++ Compiler**: Support for C++17
--   **Node.js**: 18+
--   **Models**: Place `all-MiniLM-L6-v2.onnx` and `tokenizer.json` in `/models`.
+- Multi-source recall:
+  - semantic recall from the HNSW vector index
+  - popular-item recall
+  - category-based recall from user interests and item categories
+- Rule-based ranking with semantic score, category match, popularity,
+  price affinity, and novelty.
+- Ranking strategy extension point:
+  - default: `fixed_weights`
+  - reserved: `machine_learning_reserved`
+- Lightweight reranking:
+  - seen-item filtering through Bloom filters
+  - category diversity in the top results
+  - one exploration slot for a relevant non-top-scored item
+- Explainable recommendation responses with `source`, `reason`, feature scores,
+  and `ranking_strategy`.
+- Hybrid search that combines vector search and Tantivy keyword search through
+  Reciprocal Rank Fusion.
 
-### Installation
+## Project Structure
 
-1.  **Initialize Backend**:
-    ```bash
-    cargo run --release
-    ```
-2.  **Initialize Frontend**:
-    ```bash
-    cd frontend && npm install && npm run dev
-    ```
+```text
+src/
+  main.rs                 Axum server, route handlers, app state
+  embedding.rs            ONNX Runtime embedding inference
+  ffi.rs                  Rust bindings for the C++ HNSW layer
+  hybrid.rs               RRF fusion for search results
+  model.rs                User and item data models
+  storage.rs              Sled persistence
+  text_search.rs          Tantivy indexing and search
+  recommendation/
+    mod.rs                Recommendation module exports
+    pipeline.rs           Recall, rank, rerank, explain orchestration
+    recall.rs             Multi-source candidate generation
+    rank.rs               Ranking strategies and scoring
+    rerank.rs             Diversity and exploration reranking
+    explain.rs            Source and reason labels
+    features.rs           Ranking feature helpers
+    types.rs              Pipeline input/output types
+    tests.rs              Recommendation unit tests
+cpp/                       C++17 HNSW/vector-search implementation
+frontend/                  Vite/React UI
+models/                    Local ONNX model and tokenizer files
+data/                      Local Sled and index persistence
+assets/                    Static assets
+docs/                      Design notes and expansion plans
+```
 
-## 📊 Technical Components
+## Requirements
 
--   **AI Embedding (`src/embedding.rs`)**: Uses `ort` crate to run BERT models. Implements Mean Pooling and L2 Normalization.
--   **Keyword Search (`src/text_search.rs`)**: Tantivy-based full-text indexing for precise term matching.
--   **Hybrid Logic (`src/hybrid.rs`)**: Implements Reciprocal Rank Fusion (RRF) to merge multiple search result streams.
--   **C++ Engine (`cpp/`)**: FFI-wrapped HNSW index for high-speed retrieval.
--   **Storage (`src/storage.rs`)**: ACID-compliant metadata storage.
+- Rust 1.75+
+- A C++17 compiler
+- Node.js 18+
+- Local model files:
+  - `models/all-MiniLM-L6-v2.onnx`
+  - `models/tokenizer.json`
 
----
-**Mini-RecSys** - Intelligent recommendation through systems engineering.
+The current tokenizer/model setup is treated as English-only for this MVP.
+User profile text, search input, item names, and recommendation explanations
+should remain English. Search requests containing CJK text are rejected.
+
+## Running Locally
+
+Start the backend:
+
+```bash
+cargo run --release
+```
+
+Start the frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend development server proxies user-facing workflows to the backend
+API during local development.
+
+## API Overview
+
+- `GET /recommend?uid=<user_id>`: returns explainable recommendations.
+- `GET /search?query=<text>`: runs hybrid vector and keyword search.
+- `POST /mark_seen`: records seen item IDs in the user's Bloom filter.
+- `GET /health`: returns a basic service health response.
+
+Recommendation items include ranking features and explanation fields such as:
+
+```json
+{
+  "item_id": 1,
+  "semantic_score": 0.82,
+  "category_score": 1.0,
+  "popularity": 0.45,
+  "price_affinity": 0.91,
+  "novelty": 0.55,
+  "final_score": 0.73,
+  "ranking_strategy": "fixed_weights",
+  "source": "semantic+category",
+  "reason": "semantic_match"
+}
+```
+
+## Configuration
+
+The ranking strategy can be selected with:
+
+```bash
+MINI_RECSYS_RANKING_STRATEGY=fixed_weights
+MINI_RECSYS_RANKING_STRATEGY=machine_learning_reserved
+```
+
+`machine_learning_reserved` currently falls back to the same fixed-weight score.
+It exists to keep the ranking strategy boundary explicit without introducing a
+training pipeline yet.
+
+## Development Checks
+
+Run these before committing backend changes:
+
+```bash
+cargo fmt
+cargo fmt --check
+cargo clippy --fix --allow-dirty --allow-staged
+cargo check
+cargo test
+```
+
+Run this before committing frontend or API-response changes:
+
+```bash
+cd frontend
+npm run build
+```
+
+Generated files under `frontend/dist/`, local data under `data/`, model files
+under `models/`, and dependency directories should not be committed.
+
+## Notes
+
+This repository is currently scoped to a single-service MVP. Phase 2 feedback
+loops and Phase 3 Kubernetes deployment work are documented under `docs/` but
+are not required for running the current Phase 1 service.
