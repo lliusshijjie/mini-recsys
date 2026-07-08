@@ -13,4 +13,4 @@ mod tests;
 
 pub use pipeline::build_recommendations;
 pub use rank::RankingStrategyKind;
-pub use types::RecommendationConfig;
+pub use types::{RecommendationConfig, RecommendationOutput, RecommendedItem};

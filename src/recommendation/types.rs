@@ -1,7 +1,8 @@
 //! Shared recommendation data types.
 
+use crate::behavior::UserPreferences;
 use crate::recommendation::rank::RankingStrategyKind;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 const DEFAULT_LIMIT: usize = 10;
 const DEFAULT_MAX_PER_CATEGORY: usize = 3;
@@ -13,6 +14,7 @@ pub struct RecommendationConfig {
     pub max_per_category: usize,
     pub exploration_slots: usize,
     pub ranking_strategy: RankingStrategyKind,
+    pub preferences: Option<UserPreferences>,
 }
 
 impl Default for RecommendationConfig {
@@ -22,6 +24,7 @@ impl Default for RecommendationConfig {
             max_per_category: DEFAULT_MAX_PER_CATEGORY,
             exploration_slots: DEFAULT_EXPLORATION_SLOTS,
             ranking_strategy: RankingStrategyKind::FixedWeights,
+            preferences: None,
         }
     }
 }
@@ -30,6 +33,22 @@ impl Default for RecommendationConfig {
 pub struct RecommendationOutput {
     pub items: Vec<RecommendedItem>,
     pub filtered_count: usize,
+    pub debug: RecommendationDebug,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct RecommendationDebug {
+    pub candidate_count: usize,
+    pub candidates: Vec<DebugCandidate>,
+    pub category_distribution: HashMap<String, usize>,
+    pub source_distribution: HashMap<String, usize>,
+}
+
+#[derive(Debug, Clone)]
+pub struct DebugCandidate {
+    pub item_id: u64,
+    pub semantic_score: f32,
+    pub source: String,
 }
 
 #[derive(Debug, Clone)]
@@ -44,6 +63,7 @@ pub struct RecommendedItem {
     pub popularity: f32,
     pub price_affinity: f32,
     pub novelty: f32,
+    pub feedback_score: f32,
     pub final_score: f32,
     pub ranking_strategy: String,
     pub source: String,
@@ -55,6 +75,7 @@ pub(super) struct Candidate {
     pub item_id: u64,
     pub semantic_score: f32,
     pub sources: HashSet<&'static str>,
+    pub preferences: Option<UserPreferences>,
 }
 
 impl Candidate {
@@ -63,6 +84,7 @@ impl Candidate {
             item_id,
             semantic_score: 0.0,
             sources: HashSet::new(),
+            preferences: None,
         }
     }
 

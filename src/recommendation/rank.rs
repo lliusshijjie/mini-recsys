@@ -36,6 +36,7 @@ pub(super) struct RankingFeatures {
     popularity: f32,
     price_affinity: f32,
     novelty: f32,
+    feedback_score: f32,
 }
 
 pub(super) trait Ranker {
@@ -77,6 +78,7 @@ impl Ranker for FixedWeightRanker {
             + features.category_score * self.weights.category
             + features.popularity * self.weights.popularity
             + ((features.price_affinity + features.novelty) / 2.0) * self.weights.price_and_novelty
+            + features.feedback_score * 0.25
     }
 }
 
@@ -103,10 +105,22 @@ pub(super) fn rank_candidate(
     ranker: &dyn Ranker,
 ) -> RecommendedItem {
     let semantic_score = candidate.semantic_score;
-    let category_score = category_scores
+    let base_category_score = category_scores
         .get(&item.category)
         .copied()
         .unwrap_or_default();
+    let (category_preference, item_preference) = candidate
+        .preferences
+        .as_ref()
+        .map(|preferences| {
+            (
+                preferences.category_weight(&item.category),
+                preferences.item_weight(item.id),
+            )
+        })
+        .unwrap_or_default();
+    let category_score = (base_category_score + category_preference * 0.25).clamp(0.0, 1.0);
+    let feedback_score = ((category_preference * 0.4) + item_preference).clamp(-1.0, 1.0);
     let popularity = normalize_score(item.popularity);
     let price_affinity = price_stats.affinity(item.price);
     let novelty = 1.0 - popularity;
@@ -116,11 +130,16 @@ pub(super) fn rank_candidate(
         popularity,
         price_affinity,
         novelty,
+        feedback_score,
     };
     let final_score = ranker.score(&features);
 
     let source = source_label(&candidate.sources);
-    let reason = reason_for(&source, semantic_score, category_score);
+    let reason = if feedback_score > 0.15 {
+        "feedback_match".to_string()
+    } else {
+        reason_for(&source, semantic_score, category_score)
+    };
 
     RecommendedItem {
         item_id: item.id,
@@ -133,6 +152,7 @@ pub(super) fn rank_candidate(
         popularity,
         price_affinity,
         novelty,
+        feedback_score,
         final_score,
         ranking_strategy: ranker.name().to_string(),
         source,
