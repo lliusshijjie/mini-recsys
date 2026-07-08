@@ -1,0 +1,10 @@
+target/
+data/
+models/
+frontend/node_modules/
+frontend/dist/
+.git/
+.vscode/
+.env
+.env.*
+*.log

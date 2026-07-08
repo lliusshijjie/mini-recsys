@@ -36,6 +36,8 @@ clear extension point for future machine-learning ranking.
 - Persisted recent events and lightweight category/item preference weights.
 - Debug output for candidate counts, recall sources, category distribution, and
   source distribution.
+- Kubernetes-oriented service behavior with env-based configuration, live/ready
+  probes, Prometheus-style metrics, and container manifests.
 - Hybrid search that combines vector search and Tantivy keyword search through
   Reciprocal Rank Fusion.
 
@@ -107,7 +109,11 @@ API during local development.
 - `POST /events`: records one behavior event and updates preferences.
 - `POST /mark_seen`: records seen item IDs in the user's Bloom filter.
 - `GET /debug/recommendation?uid=<user_id>`: returns recommendation debug data.
-- `GET /health`: returns a basic service health response.
+- `GET /livez`: process liveness probe.
+- `GET /readyz`: readiness probe that succeeds after storage, indexes, model
+  loading, and embedding warmup complete.
+- `GET /health`: compatibility health response.
+- `GET /metrics`: Prometheus-style service metrics.
 
 Recommendation items include ranking features and explanation fields such as:
 
@@ -142,6 +148,16 @@ Supported `event_type` values are `impression`, `click`, `like`, and `dismiss`.
 
 ## Configuration
 
+Runtime configuration is controlled with environment variables:
+
+```bash
+PORT=3000
+DATA_DIR=data
+MODEL_PATH=models/all-MiniLM-L6-v2.onnx
+TOKENIZER_PATH=models/tokenizer.json
+CORS_ORIGIN=http://localhost:5173
+```
+
 The ranking strategy can be selected with:
 
 ```bash
@@ -152,6 +168,28 @@ MINI_RECSYS_RANKING_STRATEGY=machine_learning_reserved
 `machine_learning_reserved` currently falls back to the same fixed-weight score.
 It exists to keep the ranking strategy boundary explicit without introducing a
 training pipeline yet.
+
+## Container and Kubernetes
+
+Build the backend image:
+
+```bash
+docker build -t mini-recsys:latest .
+```
+
+Run locally with mounted data and model directories:
+
+```bash
+docker run --rm -p 3000:3000 \
+  -e CORS_ORIGIN=http://localhost:5173 \
+  -v "$(pwd)/data:/app/data" \
+  -v "$(pwd)/models:/models:ro" \
+  mini-recsys:latest
+```
+
+Kubernetes examples live under `deploy/k8s/` and include a `Deployment`,
+`Service`, `ConfigMap`, and PVCs for data and model mounts. The example is
+single-replica only because Sled, HNSW, and Tantivy are local writable state.
 
 ## Development Checks
 

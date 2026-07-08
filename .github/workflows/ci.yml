@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "feature/**"
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  rust:
+    name: Rust checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang g++ pkg-config
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Run Clippy
+        run: cargo clippy --all-targets
+
+      - name: Check build
+        run: cargo check
+
+      - name: Run tests
+        run: cargo test
+
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+  container:
+    name: Container build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t mini-recsys:ci .
+
+  manifests:
+    name: Kubernetes manifests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install YAML parser
+        run: python -m pip install --disable-pip-version-check pyyaml
+
+      - name: Validate manifests
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          files = [
+              Path("deploy/k8s/configmap.yaml"),
+              Path("deploy/k8s/pvc.yaml"),
+              Path("deploy/k8s/deployment.yaml"),
+              Path("deploy/k8s/service.yaml"),
+          ]
+
+          count = 0
+          for path in files:
+              for doc in yaml.safe_load_all(path.read_text(encoding="utf-8")):
+                  if not doc:
+                      continue
+                  assert doc.get("apiVersion"), f"{path}: missing apiVersion"
+                  assert doc.get("kind"), f"{path}: missing kind"
+                  assert doc.get("metadata", {}).get("name"), f"{path}: missing metadata.name"
+                  count += 1
+
+          print(f"validated {count} Kubernetes objects")
+          PY

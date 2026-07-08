@@ -5,11 +5,10 @@ use ndarray::{Array1, Array2};
 use ort::inputs;
 use ort::session::Session;
 use ort::value::Value;
+use std::path::Path;
 use std::sync::Mutex;
 use tokenizers::Tokenizer;
 
-const MODEL_PATH: &str = "models/all-MiniLM-L6-v2.onnx";
-const TOKENIZER_PATH: &str = "models/tokenizer.json";
 const EMBEDDING_DIM: usize = 384;
 
 pub struct EmbeddingModel {
@@ -18,14 +17,17 @@ pub struct EmbeddingModel {
 }
 
 impl EmbeddingModel {
-    pub fn new() -> Result<Self> {
-        // Initialize session
+    pub fn new_with_paths(
+        model_path: impl AsRef<Path>,
+        tokenizer_path: impl AsRef<Path>,
+    ) -> Result<Self> {
+        // Initialize session.
         let session = Session::builder()?
             .with_intra_threads(4)?
-            .commit_from_file(MODEL_PATH)
+            .commit_from_file(model_path.as_ref())
             .context("Failed to load ONNX model")?;
 
-        let tokenizer = Tokenizer::from_file(TOKENIZER_PATH)
+        let tokenizer = Tokenizer::from_file(tokenizer_path.as_ref())
             .map_err(|e| anyhow::anyhow!("Failed to load tokenizer: {}", e))?;
 
         Ok(Self {

@@ -1,6 +1,7 @@
 //! Application initialization, routing, and lifecycle support.
 
 use crate::behavior::{BehaviorEvent, EventType, UserPreferences};
+use crate::config::AppConfig;
 use crate::embedding;
 use crate::ffi::{add_item_to_hnsw, get_hnsw_count, hnsw_search, load_hnsw_index, save_hnsw_index};
 use crate::hybrid;
@@ -8,6 +9,7 @@ use crate::model::{
     generate_category_embedding, generate_random_embedding, generate_user_embedding, Item,
     ItemJson, User, DIM,
 };
+use crate::observability::Metrics;
 use crate::recommendation::{
     build_recommendations, RankingStrategyKind, RecommendationConfig, RecommendationOutput,
     RecommendedItem as PipelineRecommendedItem,
@@ -15,23 +17,25 @@ use crate::recommendation::{
 use crate::storage::Storage;
 use crate::text_search::TextSearch;
 use anyhow::Result;
+use axum::body::Body;
 use axum::http::{HeaderValue, Method};
+use axum::middleware::{self, Next};
 use axum::{
     extract::{Query, State},
-    http::StatusCode,
-    response::Json,
+    http::{Request, StatusCode},
+    response::{Json, Response},
     routing::{get, post},
     Router,
 };
 use fastbloom_rs::Membership;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use std::collections::HashMap;
 use std::str::FromStr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tower_http::cors::CorsLayer;
-
-const INDEX_PATH: &str = "data/index.bin";
-const DB_PATH: &str = "data/db";
+use std::time::Instant;
+use tower_http::cors::{Any, CorsLayer};
 
 // ============================================================================
 // AppState
@@ -44,6 +48,23 @@ pub struct AppState {
     pub item_map: HashMap<u64, usize>,
     pub embedding_model: Option<Arc<embedding::EmbeddingModel>>,
     pub text_search: Arc<TextSearch>,
+    pub metrics: Arc<Metrics>,
+    pub readiness: Arc<ReadinessState>,
+}
+
+#[derive(Debug, Default)]
+pub struct ReadinessState {
+    ready: AtomicBool,
+}
+
+impl ReadinessState {
+    pub fn mark_ready(&self) {
+        self.ready.store(true, Ordering::Release);
+    }
+
+    pub fn is_ready(&self) -> bool {
+        self.ready.load(Ordering::Acquire)
+    }
 }
 
 // ============================================================================
@@ -165,6 +186,19 @@ async fn recommend_handler(
 ) -> Result<Json<RecommendResponse>, (StatusCode, Json<ErrorResponse>)> {
     let (user, output) = build_user_recommendation_output(&state, params.uid)?;
     let filtered_count = output.filtered_count;
+    state
+        .metrics
+        .record_recommendation_candidates(output.debug.candidate_count);
+    println!(
+        "{}",
+        json!({
+            "event": "recommendation",
+            "user_id": params.uid,
+            "candidate_count": output.debug.candidate_count,
+            "filtered_count": filtered_count,
+            "source_distribution": output.debug.source_distribution,
+        })
+    );
     let recommendations = output
         .items
         .into_iter()
@@ -562,6 +596,62 @@ async fn health_handler() -> &'static str {
     "OK"
 }
 
+async fn livez_handler() -> &'static str {
+    "OK"
+}
+
+async fn readyz_handler(State(state): State<Arc<AppState>>) -> (StatusCode, &'static str) {
+    match readiness_status(&state.readiness) {
+        StatusCode::OK => (StatusCode::OK, "READY"),
+        status => (status, "NOT_READY"),
+    }
+}
+
+fn readiness_status(readiness: &ReadinessState) -> StatusCode {
+    if readiness.is_ready() {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    }
+}
+
+async fn metrics_handler(State(state): State<Arc<AppState>>) -> String {
+    state.metrics.render_prometheus()
+}
+
+async fn metrics_middleware(
+    State(state): State<Arc<AppState>>,
+    request: Request<Body>,
+    next: Next,
+) -> Response {
+    let request_id = state.metrics.next_request_id();
+    let method = request.method().to_string();
+    let path = request.uri().path().to_string();
+    let query = request.uri().query().unwrap_or_default().to_string();
+    let started = Instant::now();
+    let response = next.run(request).await;
+    let status = response.status().as_u16();
+    let elapsed = started.elapsed();
+    state
+        .metrics
+        .record_http_request(&method, &path, status, elapsed);
+
+    println!(
+        "{}",
+        json!({
+            "event": "http_request",
+            "request_id": request_id,
+            "method": method,
+            "path": path,
+            "query": query,
+            "status": status,
+            "duration_ms": elapsed.as_secs_f64() * 1000.0,
+        })
+    );
+
+    response
+}
+
 fn contains_cjk_text(text: &str) -> bool {
     text.chars().any(|ch| {
         matches!(
@@ -575,129 +665,6 @@ fn contains_cjk_text(text: &str) -> bool {
                 | '\u{2B820}'..='\u{2CEAF}'
         )
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::model::DIM;
-    use fastbloom_rs::Membership;
-    use std::fs;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    #[test]
-    fn detects_cjk_text_as_unsupported_search_input() {
-        assert!(contains_cjk_text("wireless mouse \u{9F20}\u{6807}"));
-        assert!(!contains_cjk_text("wireless mouse"));
-    }
-
-    fn temp_path(name: &str) -> String {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        std::env::temp_dir()
-            .join(format!("mini-recsys-{}-{}", name, now))
-            .to_string_lossy()
-            .into_owned()
-    }
-
-    fn test_item(id: u64, category: &str) -> Item {
-        Item {
-            id,
-            name: format!("Item {}", id),
-            category: category.to_string(),
-            image_url: String::new(),
-            price: 10.0,
-            embedding: vec![0.0; DIM],
-            popularity: 0.5,
-        }
-    }
-
-    fn test_state(path: &str) -> AppState {
-        let storage = Arc::new(Storage::new(path).unwrap());
-        let users = vec![User {
-            id: 1,
-            name: "Test user".to_string(),
-            embedding: vec![0.0; DIM],
-        }];
-        let items = vec![test_item(10, "Books")];
-        storage.save_user(&users[0]).unwrap();
-        storage.save_item(&items[0]).unwrap();
-        let item_map = items
-            .iter()
-            .enumerate()
-            .map(|(index, item)| (item.id, index))
-            .collect();
-        let text_search = Arc::new(TextSearch::new(&format!("{}-tantivy", path)).unwrap());
-
-        AppState {
-            storage,
-            users,
-            items,
-            item_map,
-            embedding_model: None,
-            text_search,
-        }
-    }
-
-    #[test]
-    fn record_event_rejects_unknown_user() {
-        let path = temp_path("unknown-user");
-        let state = test_state(&path);
-
-        let err = record_behavior_event(&state, 99, 10, EventType::Click).unwrap_err();
-
-        assert_eq!(err.0, StatusCode::NOT_FOUND);
-        drop(state);
-        let _ = fs::remove_dir_all(&path);
-        let _ = fs::remove_dir_all(format!("{}-tantivy", path));
-    }
-
-    #[test]
-    fn record_event_rejects_unknown_item() {
-        let path = temp_path("unknown-item");
-        let state = test_state(&path);
-
-        let err = record_behavior_event(&state, 1, 99, EventType::Click).unwrap_err();
-
-        assert_eq!(err.0, StatusCode::NOT_FOUND);
-        drop(state);
-        let _ = fs::remove_dir_all(&path);
-        let _ = fs::remove_dir_all(format!("{}-tantivy", path));
-    }
-
-    #[test]
-    fn impression_event_updates_seen_filter() {
-        let path = temp_path("impression");
-        let state = test_state(&path);
-
-        let response = record_behavior_event(&state, 1, 10, EventType::Impression).unwrap();
-        let filter = state.storage.get_user_filter(1).unwrap();
-
-        assert!(response.recorded);
-        assert_eq!(response.recent_event_count, 1);
-        assert!(filter.contains(&10u64.to_le_bytes()));
-        drop(state);
-        let _ = fs::remove_dir_all(&path);
-        let _ = fs::remove_dir_all(format!("{}-tantivy", path));
-    }
-
-    #[test]
-    fn like_event_updates_persisted_preferences() {
-        let path = temp_path("like");
-        let state = test_state(&path);
-
-        let response = record_behavior_event(&state, 1, 10, EventType::Like).unwrap();
-        let preferences = state.storage.get_user_preferences(1).unwrap();
-
-        assert_eq!(response.event_type, "like");
-        assert!(preferences.category_weight("Books") > 0.0);
-        assert!(preferences.item_weight(10) > 0.0);
-        drop(state);
-        let _ = fs::remove_dir_all(&path);
-        let _ = fs::remove_dir_all(format!("{}-tantivy", path));
-    }
 }
 
 // ============================================================================
@@ -810,6 +777,8 @@ pub fn init_data_with_storage(
     storage: Arc<Storage>,
     embedding_model: Option<Arc<embedding::EmbeddingModel>>,
     text_search: Arc<TextSearch>,
+    metrics: Arc<Metrics>,
+    readiness: Arc<ReadinessState>,
 ) -> Result<Arc<AppState>> {
     let items = if storage.items_count() == 0 {
         println!("📂 Database empty, loading from products.json...");
@@ -865,6 +834,8 @@ pub fn init_data_with_storage(
         item_map,
         embedding_model,
         text_search,
+        metrics,
+        readiness,
     }))
 }
 
@@ -872,12 +843,13 @@ pub fn init_data_with_storage(
 // Index initialization (hydration)
 // ============================================================================
 
-pub fn init_hnsw_with_hydration(items: &[Item]) -> Result<()> {
+pub fn init_hnsw_with_hydration(items: &[Item], config: &AppConfig) -> Result<()> {
     let max_elements = items.len() + 1000;
+    let index_path = config.index_path_str();
 
-    println!("🔧 Loading HNSW index from {}...", INDEX_PATH);
+    println!("🔧 Loading HNSW index from {}...", index_path);
     let loaded =
-        load_hnsw_index(INDEX_PATH, DIM, max_elements, 100).map_err(|e| anyhow::anyhow!(e))?;
+        load_hnsw_index(&index_path, DIM, max_elements, 100).map_err(|e| anyhow::anyhow!(e))?;
 
     let index_count = get_hnsw_count();
     let db_count = items.len();
@@ -915,11 +887,12 @@ pub fn init_hnsw_with_hydration(items: &[Item]) -> Result<()> {
 // Graceful shutdown
 // ============================================================================
 
-async fn graceful_shutdown(storage: Arc<Storage>) {
+async fn graceful_shutdown(storage: Arc<Storage>, config: AppConfig) {
     println!("\n🛑 Shutting down...");
+    let index_path = config.index_path_str();
 
-    match save_hnsw_index(INDEX_PATH) {
-        Ok(()) => println!("💾 HNSW index saved to {}", INDEX_PATH),
+    match save_hnsw_index(&index_path) {
+        Ok(()) => println!("💾 HNSW index saved to {}", index_path),
         Err(e) => eprintln!("❌ Failed to save index: {}", e),
     }
 
@@ -931,8 +904,8 @@ async fn graceful_shutdown(storage: Arc<Storage>) {
     println!("👋 Goodbye!");
 }
 
-pub fn load_embedding_model() -> Option<Arc<embedding::EmbeddingModel>> {
-    match embedding::EmbeddingModel::new() {
+pub fn load_embedding_model(config: &AppConfig) -> Option<Arc<embedding::EmbeddingModel>> {
+    match embedding::EmbeddingModel::new_with_paths(&config.model_path, &config.tokenizer_path) {
         Ok(model) => {
             println!(
                 "🧠 Embedding model loaded (dimension: {})\n",
@@ -950,15 +923,17 @@ pub fn load_embedding_model() -> Option<Arc<embedding::EmbeddingModel>> {
     }
 }
 
-pub fn open_storage() -> Result<Arc<Storage>> {
-    let storage = Arc::new(Storage::new(DB_PATH)?);
-    println!("💾 Sled database opened at {}", DB_PATH);
+pub fn open_storage(config: &AppConfig) -> Result<Arc<Storage>> {
+    let db_path = config.db_path_str();
+    let storage = Arc::new(Storage::new(&db_path)?);
+    println!("💾 Sled database opened at {}", db_path);
     Ok(storage)
 }
 
-pub fn open_text_search() -> Result<Arc<TextSearch>> {
-    let text_search = Arc::new(TextSearch::new("data/tantivy_index")?);
-    println!("🔍 Text search index initialized at data/tantivy_index\n");
+pub fn open_text_search(config: &AppConfig) -> Result<Arc<TextSearch>> {
+    let tantivy_path = config.tantivy_path_str();
+    let text_search = Arc::new(TextSearch::new(&tantivy_path)?);
+    println!("🔍 Text search index initialized at {}\n", tantivy_path);
     Ok(text_search)
 }
 
@@ -970,42 +945,207 @@ pub fn log_loaded_state(state: &AppState) {
     );
 }
 
-pub fn build_app(state: Arc<AppState>) -> Router {
+pub fn warmup_embedding_model(model: Option<&embedding::EmbeddingModel>) -> Result<bool> {
+    match model {
+        Some(model) => {
+            let _ = model.encode("warmup recommendation query")?;
+            println!("🔥 Embedding warmup completed");
+            Ok(true)
+        }
+        None => {
+            eprintln!("⚠️  Embedding warmup skipped because the model is unavailable");
+            Ok(false)
+        }
+    }
+}
+
+pub fn build_app(state: Arc<AppState>, config: &AppConfig) -> Router {
     let cors = CorsLayer::new()
-        .allow_origin("http://localhost:5173".parse::<HeaderValue>().unwrap())
         .allow_methods([Method::GET, Method::POST])
         .allow_headers([axum::http::header::CONTENT_TYPE]);
+    let cors = if config.cors_origin == "*" {
+        cors.allow_origin(Any)
+    } else {
+        cors.allow_origin(config.cors_origin.parse::<HeaderValue>().unwrap())
+    };
 
     Router::new()
         .route("/health", get(health_handler))
+        .route("/livez", get(livez_handler))
+        .route("/readyz", get(readyz_handler))
+        .route("/metrics", get(metrics_handler))
         .route("/users", get(users_handler))
         .route("/recommend", get(recommend_handler))
         .route("/debug/recommendation", get(debug_recommendation_handler))
         .route("/search", get(search_handler))
         .route("/events", post(events_handler))
         .route("/mark_seen", post(mark_seen_handler))
+        .layer(middleware::from_fn_with_state(
+            Arc::clone(&state),
+            metrics_middleware,
+        ))
         .layer(cors)
         .with_state(state)
 }
 
-pub async fn serve_app(app: Router, storage: Arc<Storage>) -> Result<()> {
-    let addr = "0.0.0.0:3000";
+pub async fn serve_app(app: Router, storage: Arc<Storage>, config: AppConfig) -> Result<()> {
+    let addr = format!("0.0.0.0:{}", config.port);
     println!("🌐 Server running at http://{}", addr);
     println!("   GET  /search?q=<query> - semantic search");
     println!("   POST /events - record behavior feedback");
     println!("   Press Ctrl+C to shutdown gracefully\n");
 
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
 
     let storage_for_shutdown = Arc::clone(&storage);
+    let config_for_shutdown = config.clone();
     tokio::select! {
         result = axum::serve(listener, app) => {
             result?;
         }
         _ = tokio::signal::ctrl_c() => {
-            graceful_shutdown(storage_for_shutdown).await;
+            graceful_shutdown(storage_for_shutdown, config_for_shutdown).await;
         }
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::DIM;
+    use fastbloom_rs::Membership;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn detects_cjk_text_as_unsupported_search_input() {
+        assert!(contains_cjk_text("wireless mouse \u{9F20}\u{6807}"));
+        assert!(!contains_cjk_text("wireless mouse"));
+    }
+
+    #[test]
+    fn readiness_status_changes_after_warmup_completes() {
+        let readiness = ReadinessState::default();
+
+        assert_eq!(
+            readiness_status(&readiness),
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+
+        readiness.mark_ready();
+
+        assert_eq!(readiness_status(&readiness), StatusCode::OK);
+    }
+
+    fn temp_path(name: &str) -> String {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir()
+            .join(format!("mini-recsys-{}-{}", name, now))
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    fn test_item(id: u64, category: &str) -> Item {
+        Item {
+            id,
+            name: format!("Item {}", id),
+            category: category.to_string(),
+            image_url: String::new(),
+            price: 10.0,
+            embedding: vec![0.0; DIM],
+            popularity: 0.5,
+        }
+    }
+
+    fn test_state(path: &str) -> AppState {
+        let storage = Arc::new(Storage::new(path).unwrap());
+        let users = vec![User {
+            id: 1,
+            name: "Test user".to_string(),
+            embedding: vec![0.0; DIM],
+        }];
+        let items = vec![test_item(10, "Books")];
+        storage.save_user(&users[0]).unwrap();
+        storage.save_item(&items[0]).unwrap();
+        let item_map = items
+            .iter()
+            .enumerate()
+            .map(|(index, item)| (item.id, index))
+            .collect();
+        let text_search = Arc::new(TextSearch::new(&format!("{}-tantivy", path)).unwrap());
+
+        AppState {
+            storage,
+            users,
+            items,
+            item_map,
+            embedding_model: None,
+            text_search,
+            metrics: Arc::new(Metrics::default()),
+            readiness: Arc::new(ReadinessState::default()),
+        }
+    }
+
+    #[test]
+    fn record_event_rejects_unknown_user() {
+        let path = temp_path("unknown-user");
+        let state = test_state(&path);
+
+        let err = record_behavior_event(&state, 99, 10, EventType::Click).unwrap_err();
+
+        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        drop(state);
+        let _ = fs::remove_dir_all(&path);
+        let _ = fs::remove_dir_all(format!("{}-tantivy", path));
+    }
+
+    #[test]
+    fn record_event_rejects_unknown_item() {
+        let path = temp_path("unknown-item");
+        let state = test_state(&path);
+
+        let err = record_behavior_event(&state, 1, 99, EventType::Click).unwrap_err();
+
+        assert_eq!(err.0, StatusCode::NOT_FOUND);
+        drop(state);
+        let _ = fs::remove_dir_all(&path);
+        let _ = fs::remove_dir_all(format!("{}-tantivy", path));
+    }
+
+    #[test]
+    fn impression_event_updates_seen_filter() {
+        let path = temp_path("impression");
+        let state = test_state(&path);
+
+        let response = record_behavior_event(&state, 1, 10, EventType::Impression).unwrap();
+        let filter = state.storage.get_user_filter(1).unwrap();
+
+        assert!(response.recorded);
+        assert_eq!(response.recent_event_count, 1);
+        assert!(filter.contains(&10u64.to_le_bytes()));
+        drop(state);
+        let _ = fs::remove_dir_all(&path);
+        let _ = fs::remove_dir_all(format!("{}-tantivy", path));
+    }
+
+    #[test]
+    fn like_event_updates_persisted_preferences() {
+        let path = temp_path("like");
+        let state = test_state(&path);
+
+        let response = record_behavior_event(&state, 1, 10, EventType::Like).unwrap();
+        let preferences = state.storage.get_user_preferences(1).unwrap();
+
+        assert_eq!(response.event_type, "like");
+        assert!(preferences.category_weight("Books") > 0.0);
+        assert!(preferences.item_weight(10) > 0.0);
+        drop(state);
+        let _ = fs::remove_dir_all(&path);
+        let _ = fs::remove_dir_all(format!("{}-tantivy", path));
+    }
 }
