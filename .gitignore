@@ -1,6 +1,5 @@
 # Rust build outputs
 /target/
-Cargo.lock
 **/*.rs.bk
 
 # IDE and editor files

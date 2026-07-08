@@ -1,4 +1,4 @@
-FROM rust:1.82-bookworm AS builder
+FROM rust:1.89-bookworm AS builder
 
 WORKDIR /app
 
@@ -6,11 +6,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends clang g++ pkg-config ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-COPY Cargo.toml build.rs ./
+COPY Cargo.toml Cargo.lock build.rs ./
 COPY src ./src
 COPY cpp ./cpp
 
-RUN cargo build --release
+RUN cargo build --release --locked
 
 FROM debian:bookworm-slim AS runtime
 

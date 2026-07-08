@@ -1,6 +1,6 @@
 //! Embedding module: semantic vectorization via ONNX Runtime
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Result};
 use ndarray::{Array1, Array2};
 use ort::inputs;
 use ort::session::Session;
@@ -22,10 +22,12 @@ impl EmbeddingModel {
         tokenizer_path: impl AsRef<Path>,
     ) -> Result<Self> {
         // Initialize session.
-        let session = Session::builder()?
-            .with_intra_threads(4)?
+        let session = Session::builder()
+            .map_err(|e| anyhow!("Failed to create ONNX session builder: {}", e))?
+            .with_intra_threads(4)
+            .map_err(|e| anyhow!("Failed to configure ONNX intra threads: {}", e))?
             .commit_from_file(model_path.as_ref())
-            .context("Failed to load ONNX model")?;
+            .map_err(|e| anyhow!("Failed to load ONNX model: {}", e))?;
 
         let tokenizer = Tokenizer::from_file(tokenizer_path.as_ref())
             .map_err(|e| anyhow::anyhow!("Failed to load tokenizer: {}", e))?;
@@ -55,27 +57,31 @@ impl EmbeddingModel {
         let seq_len = input_ids.len();
 
         // Step B: build input tensors
-        let input_ids_val = Value::from_array((vec![1usize, seq_len], input_ids))?;
-        let attention_mask_val =
-            Value::from_array((vec![1usize, seq_len], attention_mask.clone()))?;
-        let token_type_ids_val = Value::from_array((vec![1usize, seq_len], token_type_ids))?;
+        let input_ids_val = Value::from_array((vec![1usize, seq_len], input_ids))
+            .map_err(|e| anyhow!("Failed to create input_ids tensor: {}", e))?;
+        let attention_mask_val = Value::from_array((vec![1usize, seq_len], attention_mask.clone()))
+            .map_err(|e| anyhow!("Failed to create attention_mask tensor: {}", e))?;
+        let token_type_ids_val = Value::from_array((vec![1usize, seq_len], token_type_ids))
+            .map_err(|e| anyhow!("Failed to create token_type_ids tensor: {}", e))?;
 
         // Step C: run inference
         let mut session = self
             .session
             .lock()
             .map_err(|_| anyhow::anyhow!("Failed to lock ONNX session"))?;
-        let outputs = session.run(inputs![
-            "input_ids" => input_ids_val,
-            "attention_mask" => attention_mask_val,
-            "token_type_ids" => token_type_ids_val,
-        ])?;
+        let outputs = session
+            .run(inputs![
+                "input_ids" => input_ids_val,
+                "attention_mask" => attention_mask_val,
+                "token_type_ids" => token_type_ids_val,
+            ])
+            .map_err(|e| anyhow!("ONNX inference failed: {}", e))?;
 
         // Step D: Mean Pooling
         // ort 2.0 rc.9 try_extract_tensor returns (Shape, &[T])
         let (_, output_data) = outputs[0]
             .try_extract_tensor::<f32>()
-            .context("Failed to extract output tensor")?;
+            .map_err(|e| anyhow!("Failed to extract output tensor: {}", e))?;
 
         let hidden_states = Array2::from_shape_vec((seq_len, EMBEDDING_DIM), output_data.to_vec())?;
 
