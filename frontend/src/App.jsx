@@ -22,6 +22,7 @@ function App() {
     const [searchQuery, setSearchQuery] = useState('')
     const [searchResults, setSearchResults] = useState([])
     const [isSearchMode, setIsSearchMode] = useState(false)
+    const [feedbackItemId, setFeedbackItemId] = useState(null)
 
     useEffect(() => {
         axios.get(`${API_BASE}/users`)
@@ -41,14 +42,13 @@ function App() {
             setFilteredCount(res.data.filtered_count || 0)
             setResponseTime((performance.now() - start).toFixed(0))
 
-            // Automatically mark displayed items as seen.
-            const itemIds = res.data.recommendations.map(r => r.item_id)
-            if (itemIds.length > 0) {
-                axios.post(`${API_BASE}/mark_seen`, {
+            res.data.recommendations.forEach(item => {
+                axios.post(`${API_BASE}/events`, {
                     uid: selectedUserId,
-                    item_ids: itemIds
+                    item_id: item.item_id,
+                    event_type: 'impression',
                 }).catch(() => { })
-            }
+            })
         } catch (err) {
             setError(err.response?.data?.error || err.message)
             setRecommendations([])
@@ -75,6 +75,24 @@ function App() {
             setSearchResults([])
         } finally {
             setLoading(false)
+        }
+    }
+
+    const sendFeedback = async (itemId, eventType) => {
+        setFeedbackItemId(itemId)
+        setError('')
+
+        try {
+            await axios.post(`${API_BASE}/events`, {
+                uid: selectedUserId,
+                item_id: itemId,
+                event_type: eventType,
+            })
+            await fetchRecommendations()
+        } catch (err) {
+            setError(err.response?.data?.error || err.message)
+        } finally {
+            setFeedbackItemId(null)
         }
     }
 
@@ -210,6 +228,27 @@ function App() {
                                             </span>
                                         </div>
 
+                                        {!isSearchMode && (
+                                            <div className="mb-3 grid grid-cols-2 gap-2">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => sendFeedback(item.item_id, 'like')}
+                                                    disabled={feedbackItemId === item.item_id}
+                                                    className="px-3 py-2 rounded bg-emerald-600/80 hover:bg-emerald-500 text-white text-sm font-medium transition-colors disabled:opacity-50"
+                                                >
+                                                    Like
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => sendFeedback(item.item_id, 'dismiss')}
+                                                    disabled={feedbackItemId === item.item_id}
+                                                    className="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600 text-slate-100 text-sm font-medium transition-colors disabled:opacity-50"
+                                                >
+                                                    Dismiss
+                                                </button>
+                                            </div>
+                                        )}
+
                                         {/* Scores */}
                                         <div className="grid grid-cols-2 gap-2 text-center bg-slate-900/50 rounded-lg p-2">
                                             <div>
@@ -235,6 +274,10 @@ function App() {
                                             <div>
                                                 <p className="text-[10px] text-slate-500">Novel</p>
                                                 <p className="text-sm font-medium text-pink-400">{(item.novelty ?? 0).toFixed(4)}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] text-slate-500">Feedback</p>
+                                                <p className="text-sm font-medium text-emerald-400">{(item.feedback_score ?? 0).toFixed(4)}</p>
                                             </div>
                                         </div>
                                     </div>

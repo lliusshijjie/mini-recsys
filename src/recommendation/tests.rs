@@ -1,4 +1,5 @@
 use super::*;
+use crate::behavior::UserPreferences;
 use crate::model::{category_base_vector, Item, User, DIM};
 use std::collections::HashSet;
 
@@ -172,4 +173,88 @@ fn reserved_machine_learning_strategy_keeps_current_scores_until_model_exists() 
     );
     assert_eq!(fixed.items[0].item_id, reserved.items[0].item_id);
     assert!((fixed.items[0].final_score - reserved.items[0].final_score).abs() < 1e-6);
+}
+
+#[test]
+fn ranking_changes_when_feedback_preferences_are_present() {
+    let user = User {
+        id: 1,
+        name: "Test user".to_string(),
+        embedding: normalized_category("Books"),
+    };
+    let items = vec![
+        item(1, "Books", 0.80, 20.0),
+        item(2, "Electronics", 0.80, 20.0),
+    ];
+    let semantic_hits = vec![(1, 0.80), (2, 0.80)];
+
+    let baseline = build_recommendations(
+        &user,
+        &items,
+        &semantic_hits,
+        &|_| false,
+        RecommendationConfig {
+            limit: 2,
+            exploration_slots: 0,
+            ..Default::default()
+        },
+    );
+
+    let mut preferences = UserPreferences::default();
+    preferences.set_item_weight(2, 1.0);
+    preferences.set_category_weight("Electronics", 1.0);
+
+    let with_feedback = build_recommendations(
+        &user,
+        &items,
+        &semantic_hits,
+        &|_| false,
+        RecommendationConfig {
+            limit: 2,
+            exploration_slots: 0,
+            preferences: Some(preferences),
+            ..Default::default()
+        },
+    );
+
+    assert_eq!(baseline.items[0].item_id, 1);
+    assert_eq!(with_feedback.items[0].item_id, 2);
+    assert!(with_feedback.items[0].feedback_score > 0.0);
+    assert_eq!(with_feedback.items[0].reason, "feedback_match");
+}
+
+#[test]
+fn output_includes_debug_metadata_for_evaluation() {
+    let user = User {
+        id: 1,
+        name: "Test user".to_string(),
+        embedding: normalized_category("Books"),
+    };
+    let items = vec![
+        item(1, "Books", 0.80, 20.0),
+        item(2, "Electronics", 0.90, 30.0),
+    ];
+
+    let output = build_recommendations(
+        &user,
+        &items,
+        &[(1, 0.90), (2, 0.30)],
+        &|_| false,
+        RecommendationConfig {
+            limit: 2,
+            exploration_slots: 0,
+            ..Default::default()
+        },
+    );
+
+    assert!(output.debug.candidate_count >= output.items.len());
+    assert!(!output.debug.candidates.is_empty());
+    assert_eq!(
+        output.debug.category_distribution.values().sum::<usize>(),
+        output.items.len()
+    );
+    assert_eq!(
+        output.debug.source_distribution.values().sum::<usize>(),
+        output.items.len()
+    );
 }

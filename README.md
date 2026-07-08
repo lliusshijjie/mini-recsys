@@ -10,9 +10,10 @@ The current backend implements an explainable Phase 1 recommendation pipeline:
 Recall -> Rank -> Rerank -> Explain
 ```
 
-It is intentionally small and rule-driven. The project avoids large-scale model
-training infrastructure while keeping a clear extension point for future
-machine-learning ranking.
+It also includes a Phase 2 feedback loop for behavior events, lightweight
+preference updates, and recommendation debugging. The system remains small and
+rule-driven: it avoids large-scale model training infrastructure while keeping a
+clear extension point for future machine-learning ranking.
 
 ## Features
 
@@ -31,6 +32,10 @@ machine-learning ranking.
   - one exploration slot for a relevant non-top-scored item
 - Explainable recommendation responses with `source`, `reason`, feature scores,
   and `ranking_strategy`.
+- Behavior feedback through `impression`, `click`, `like`, and `dismiss` events.
+- Persisted recent events and lightweight category/item preference weights.
+- Debug output for candidate counts, recall sources, category distribution, and
+  source distribution.
 - Hybrid search that combines vector search and Tantivy keyword search through
   Reciprocal Rank Fusion.
 
@@ -99,7 +104,9 @@ API during local development.
 
 - `GET /recommend?uid=<user_id>`: returns explainable recommendations.
 - `GET /search?query=<text>`: runs hybrid vector and keyword search.
+- `POST /events`: records one behavior event and updates preferences.
 - `POST /mark_seen`: records seen item IDs in the user's Bloom filter.
+- `GET /debug/recommendation?uid=<user_id>`: returns recommendation debug data.
 - `GET /health`: returns a basic service health response.
 
 Recommendation items include ranking features and explanation fields such as:
@@ -112,12 +119,26 @@ Recommendation items include ranking features and explanation fields such as:
   "popularity": 0.45,
   "price_affinity": 0.91,
   "novelty": 0.55,
+  "feedback_score": 0.4,
   "final_score": 0.73,
   "ranking_strategy": "fixed_weights",
   "source": "semantic+category",
   "reason": "semantic_match"
 }
 ```
+
+Behavior events use a single-event request shape:
+
+```json
+{
+  "uid": 1,
+  "item_id": 42,
+  "event_type": "like"
+}
+```
+
+Supported `event_type` values are `impression`, `click`, `like`, and `dismiss`.
+`impression` also updates the Bloom filter used for seen-item filtering.
 
 ## Configuration
 
@@ -156,6 +177,6 @@ under `models/`, and dependency directories should not be committed.
 
 ## Notes
 
-This repository is currently scoped to a single-service MVP. Phase 2 feedback
-loops and Phase 3 Kubernetes deployment work are documented under `docs/` but
-are not required for running the current Phase 1 service.
+This repository is currently scoped to a single-service MVP. Phase 3 Kubernetes
+deployment work is documented under `docs/` but is not required for running the
+current service.
