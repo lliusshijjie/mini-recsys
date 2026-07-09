@@ -8,3 +8,4 @@ data:
   MODEL_PATH: /models/all-MiniLM-L6-v2.onnx
   TOKENIZER_PATH: /models/tokenizer.json
   CORS_ORIGIN: "*"
+  ORT_DYLIB_PATH: /opt/onnxruntime/lib/libonnxruntime.so

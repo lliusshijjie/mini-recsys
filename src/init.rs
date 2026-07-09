@@ -905,18 +905,35 @@ async fn graceful_shutdown(storage: Arc<Storage>, config: AppConfig) {
 }
 
 pub fn load_embedding_model(config: &AppConfig) -> Option<Arc<embedding::EmbeddingModel>> {
-    match embedding::EmbeddingModel::new_with_paths(&config.model_path, &config.tokenizer_path) {
-        Ok(model) => {
+    if !config.model_path.exists() || !config.tokenizer_path.exists() {
+        eprintln!(
+            "⚠️  Embedding assets not found at {} and {}; /search will be unavailable\n",
+            config.model_path.display(),
+            config.tokenizer_path.display()
+        );
+        return None;
+    }
+
+    match std::panic::catch_unwind(|| {
+        embedding::EmbeddingModel::new_with_paths(&config.model_path, &config.tokenizer_path)
+    }) {
+        Ok(Ok(model)) => {
             println!(
                 "🧠 Embedding model loaded (dimension: {})\n",
                 model.dimension()
             );
             Some(Arc::new(model))
         }
-        Err(e) => {
+        Ok(Err(e)) => {
             eprintln!(
                 "⚠️  Failed to load embedding model: {}\n   /search will be unavailable\n",
                 e
+            );
+            None
+        }
+        Err(_) => {
+            eprintln!(
+                "⚠️  Failed to initialize ONNX Runtime; set ORT_DYLIB_PATH to a valid libonnxruntime shared library\n   /search will be unavailable\n"
             );
             None
         }

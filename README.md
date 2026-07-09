@@ -156,7 +156,11 @@ DATA_DIR=data
 MODEL_PATH=models/all-MiniLM-L6-v2.onnx
 TOKENIZER_PATH=models/tokenizer.json
 CORS_ORIGIN=http://localhost:5173
+ORT_DYLIB_PATH=/opt/onnxruntime/lib/libonnxruntime.so
 ```
+
+`ORT_DYLIB_PATH` is read by the ONNX Runtime wrapper when the embedding model
+is loaded. The Docker image includes ONNX Runtime under `/opt/onnxruntime`.
 
 The ranking strategy can be selected with:
 

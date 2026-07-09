@@ -16,5 +16,8 @@ The container expects model files mounted at `/models`:
 - `/models/all-MiniLM-L6-v2.onnx`
 - `/models/tokenizer.json`
 
+The image includes ONNX Runtime at `/opt/onnxruntime`; `ORT_DYLIB_PATH` points
+to `/opt/onnxruntime/lib/libonnxruntime.so`.
+
 `mini-recsys-data` stores Sled, HNSW, Tantivy, and behavior feedback state.
 Multiple writer replicas are intentionally not supported for this MVP.

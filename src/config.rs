@@ -124,15 +124,15 @@ mod tests {
         ]);
 
         assert_eq!(config.port, 8080);
-        assert_eq!(config.data_dir.to_string_lossy(), "/var/lib/mini-recsys");
+        assert_eq!(config.data_dir, PathBuf::from("/var/lib/mini-recsys"));
         assert_eq!(
-            config.db_path().to_string_lossy(),
-            "/var/lib/mini-recsys\\db"
+            config.db_path(),
+            PathBuf::from("/var/lib/mini-recsys").join("db")
         );
-        assert_eq!(config.model_path.to_string_lossy(), "/models/model.onnx");
+        assert_eq!(config.model_path, PathBuf::from("/models/model.onnx"));
         assert_eq!(
-            config.tokenizer_path.to_string_lossy(),
-            "/models/tokenizer.json"
+            config.tokenizer_path,
+            PathBuf::from("/models/tokenizer.json")
         );
         assert_eq!(config.cors_origin, "https://example.test");
     }
