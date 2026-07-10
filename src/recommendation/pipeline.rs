@@ -58,6 +58,7 @@ pub fn build_recommendations(
         };
 
         ranked.push(rank_candidate(
+            user,
             item,
             &candidate,
             &category_scores,

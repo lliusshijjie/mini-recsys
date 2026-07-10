@@ -2,14 +2,84 @@
 
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 pub const DIM: usize = 384;
+
+/// Product categories aligned with `assets/products.json`.
+pub const PRODUCT_CATEGORIES: &[&str] = &[
+    "Electronics",
+    "Books",
+    "Home",
+    "Clothing",
+    "Sports",
+    "Beauty",
+    "Toys",
+    "Food",
+    "Automotive",
+    "Misc",
+];
+
+const CATEGORY_SLICE: usize = 16;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     pub id: u64,
     pub name: String,
     pub embedding: Vec<f32>,
+    #[serde(default)]
+    pub profile: UserProfile,
+}
+
+/// Offline user features used for recall and ranking cold-start users.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UserProfile {
+    pub category_weights: HashMap<String, f32>,
+    pub budget_min: f32,
+    pub budget_max: f32,
+}
+
+impl Default for UserProfile {
+    fn default() -> Self {
+        Self {
+            category_weights: HashMap::new(),
+            budget_min: 0.0,
+            budget_max: 0.0,
+        }
+    }
+}
+
+impl UserProfile {
+    pub fn build(category_weights: &[(&str, f32)], budget_min: f32, budget_max: f32) -> Self {
+        let mut weights = HashMap::new();
+        for (category, weight) in category_weights {
+            weights.insert((*category).to_string(), weight.clamp(0.0, 1.0));
+        }
+        Self {
+            category_weights: weights,
+            budget_min,
+            budget_max,
+        }
+    }
+
+    pub fn top_categories(&self, limit: usize) -> Vec<String> {
+        let mut ranked: Vec<(String, f32)> = self
+            .category_weights
+            .iter()
+            .map(|(category, weight)| (category.clone(), *weight))
+            .collect();
+        ranked.sort_by(|left, right| {
+            right
+                .1
+                .partial_cmp(&left.1)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        ranked
+            .into_iter()
+            .take(limit)
+            .map(|(category, _)| category)
+            .collect()
+    }
 }
 
 /// Temporary struct for JSON loading (no embedding or popularity).
@@ -65,17 +135,20 @@ impl Item {
 /// Category anchor vector.
 pub fn category_base_vector(category: &str) -> Vec<f32> {
     let mut vec = vec![0.0f32; DIM];
-    let range = match category {
-        "Electronics" => 0..16,
-        "Books" => 16..32,
-        "Home" => 32..48,
-        "Clothing" => 48..64,
-        _ => 0..16,
-    };
+    let range = category_dimension_range(category);
     for i in range {
         vec[i] = 1.0;
     }
     vec
+}
+
+pub fn category_dimension_range(category: &str) -> std::ops::Range<usize> {
+    let index = PRODUCT_CATEGORIES
+        .iter()
+        .position(|value| *value == category)
+        .unwrap_or(PRODUCT_CATEGORIES.len() - 1);
+    let start = index * CATEGORY_SLICE;
+    start..start + CATEGORY_SLICE
 }
 
 pub fn generate_category_embedding(category: &str) -> Vec<f32> {
@@ -112,4 +185,41 @@ pub fn generate_random_embedding() -> Vec<f32> {
     let vec: Vec<f32> = (0..DIM).map(|_| rng.gen::<f32>() * 2.0 - 1.0).collect();
     let norm: f32 = vec.iter().map(|x| x * x).sum::<f32>().sqrt();
     vec.into_iter().map(|x| x / norm).collect()
+}
+
+pub fn build_user(
+    id: u64,
+    name: impl Into<String>,
+    category_weights: &[(&str, f32)],
+    budget_min: f32,
+    budget_max: f32,
+) -> User {
+    let categories: Vec<&str> = category_weights
+        .iter()
+        .map(|(category, _)| *category)
+        .collect();
+    User {
+        id,
+        name: name.into(),
+        embedding: generate_user_embedding(&categories),
+        profile: UserProfile::build(category_weights, budget_min, budget_max),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn product_categories_have_distinct_dimension_ranges() {
+        let electronics = category_dimension_range("Electronics");
+        let books = category_dimension_range("Books");
+        let misc = category_dimension_range("Misc");
+        let unknown = category_dimension_range("Unknown");
+
+        assert_eq!(electronics, 0..16);
+        assert_eq!(books, 16..32);
+        assert_eq!(misc, 144..160);
+        assert_eq!(unknown, misc);
+    }
 }

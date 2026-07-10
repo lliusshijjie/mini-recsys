@@ -31,12 +31,42 @@ impl PriceStats {
 pub(super) fn user_category_scores(user: &User, items: &[Item]) -> HashMap<String, f32> {
     let mut scores = HashMap::new();
     for item in items {
-        scores.entry(item.category.clone()).or_insert_with(|| {
-            let base = category_base_vector(&item.category);
-            cosine_like_score(&user.embedding, &base)
-        });
+        scores
+            .entry(item.category.clone())
+            .or_insert_with(|| category_score_for_user(user, &item.category));
     }
     scores
+}
+
+fn category_score_for_user(user: &User, category: &str) -> f32 {
+    let base = category_base_vector(category);
+    let embedding_score = cosine_like_score(&user.embedding, &base);
+    let profile_weight = user
+        .profile
+        .category_weights
+        .get(category)
+        .copied()
+        .unwrap_or(0.0);
+    if profile_weight > 0.0 {
+        (embedding_score * 0.55 + profile_weight * 0.45).clamp(0.0, 1.0)
+    } else {
+        embedding_score
+    }
+}
+
+pub(super) fn user_price_affinity(user: &User, price: f32, global: &PriceStats) -> f32 {
+    let profile = &user.profile;
+    if profile.budget_max > profile.budget_min && profile.budget_min > 0.0 {
+        if (profile.budget_min..=profile.budget_max).contains(&price) {
+            1.0
+        } else if price < profile.budget_min {
+            (1.0 - (profile.budget_min - price) / profile.budget_min).clamp(0.0, 1.0)
+        } else {
+            (1.0 - (price - profile.budget_max) / profile.budget_max).clamp(0.0, 1.0)
+        }
+    } else {
+        global.affinity(price)
+    }
 }
 
 fn cosine_like_score(user_embedding: &[f32], base: &[f32]) -> f32 {

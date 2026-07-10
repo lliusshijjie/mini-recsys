@@ -1,6 +1,6 @@
 use super::*;
 use crate::behavior::{BehaviorEvent, EventType, UserPreferences};
-use crate::model::{category_base_vector, Item, User, DIM};
+use crate::model::{category_base_vector, Item, User, UserProfile, DIM};
 use std::collections::HashSet;
 
 fn normalized_category(category: &str) -> Vec<f32> {
@@ -27,6 +27,7 @@ fn pipeline_merges_sources_filters_seen_and_explains_results() {
         id: 1,
         name: "Test user".to_string(),
         embedding: normalized_category("Books"),
+        profile: UserProfile::default(),
     };
     let items = vec![
         item(1, "Books", 0.40, 20.0),
@@ -66,6 +67,7 @@ fn pipeline_limits_category_dominance_in_top_results() {
         id: 1,
         name: "Book heavy user".to_string(),
         embedding: normalized_category("Books"),
+        profile: UserProfile::default(),
     };
     let mut items = vec![
         item(1, "Books", 0.99, 20.0),
@@ -114,6 +116,7 @@ fn default_ranking_strategy_uses_fixed_weights() {
         id: 1,
         name: "Test user".to_string(),
         embedding: normalized_category("Books"),
+        profile: UserProfile::default(),
     };
     let items = vec![item(1, "Books", 0.80, 20.0)];
     let output = build_recommendations(
@@ -137,6 +140,7 @@ fn reserved_machine_learning_strategy_keeps_current_scores_until_model_exists() 
         id: 1,
         name: "Test user".to_string(),
         embedding: normalized_category("Books"),
+        profile: UserProfile::default(),
     };
     let items = vec![
         item(1, "Books", 0.80, 20.0),
@@ -181,6 +185,7 @@ fn ranking_changes_when_feedback_preferences_are_present() {
         id: 1,
         name: "Test user".to_string(),
         embedding: normalized_category("Books"),
+        profile: UserProfile::default(),
     };
     let items = vec![
         item(1, "Books", 0.80, 20.0),
@@ -229,6 +234,7 @@ fn output_includes_debug_metadata_for_evaluation() {
         id: 1,
         name: "Test user".to_string(),
         embedding: normalized_category("Books"),
+        profile: UserProfile::default(),
     };
     let items = vec![
         item(1, "Books", 0.80, 20.0),
@@ -265,6 +271,7 @@ fn recent_click_recall_adds_similar_items() {
         id: 1,
         name: "Recent interest user".to_string(),
         embedding: vec![0.0; DIM],
+        profile: UserProfile::default(),
     };
     let items = vec![
         item(10, "Books", 0.20, 20.0),
@@ -306,6 +313,7 @@ fn recent_item_recall_ignores_impression_and_dismiss_events() {
         id: 1,
         name: "Passive event user".to_string(),
         embedding: vec![0.0; DIM],
+        profile: UserProfile::default(),
     };
     let items = vec![
         item(10, "Books", 0.20, 20.0),

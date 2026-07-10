@@ -82,6 +82,20 @@ impl Storage {
         Ok(users)
     }
 
+    pub fn clear_users(&self) -> Result<()> {
+        self.users_tree
+            .clear()
+            .context("Failed to clear users tree")?;
+        Ok(())
+    }
+
+    pub fn clear_user_preferences(&self) -> Result<()> {
+        self.preferences_tree
+            .clear()
+            .context("Failed to clear preferences tree")?;
+        Ok(())
+    }
+
     // ========== Item CRUD ==========
 
     pub fn save_item(&self, item: &Item) -> Result<()> {

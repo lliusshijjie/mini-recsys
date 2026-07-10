@@ -1,6 +1,6 @@
 //! Behavior events and lightweight user preference updates.
 
-use crate::model::Item;
+use crate::model::{Item, UserProfile};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
@@ -103,6 +103,14 @@ pub struct UserPreferences {
 }
 
 impl UserPreferences {
+    pub fn from_profile(profile: &UserProfile) -> Self {
+        let mut preferences = Self::default();
+        for (category, weight) in &profile.category_weights {
+            preferences.set_category_weight(category, weight * 0.6);
+        }
+        preferences
+    }
+
     pub fn apply_event(&mut self, event_type: EventType, item: &Item) {
         let (category_delta, item_delta) = event_type.preference_delta();
         if category_delta != 0.0 {

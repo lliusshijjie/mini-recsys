@@ -6,8 +6,8 @@ use crate::embedding;
 use crate::ffi::{add_item_to_hnsw, get_hnsw_count, hnsw_search, load_hnsw_index, save_hnsw_index};
 use crate::hybrid;
 use crate::model::{
-    generate_category_embedding, generate_random_embedding, generate_user_embedding, Item,
-    ItemJson, User, DIM,
+    build_user, generate_category_embedding, generate_random_embedding, Item, ItemJson, User,
+    UserProfile, DIM, PRODUCT_CATEGORIES,
 };
 use crate::observability::Metrics;
 use crate::recommendation::{
@@ -99,6 +99,9 @@ struct RecommendItem {
 struct UserInfo {
     id: u64,
     name: String,
+    top_categories: Vec<String>,
+    budget_min: f32,
+    budget_max: f32,
 }
 
 #[derive(Serialize)]
@@ -206,10 +209,7 @@ async fn recommend_handler(
         .collect();
 
     Ok(Json(RecommendResponse {
-        user: UserInfo {
-            id: user.id,
-            name: user.name.clone(),
-        },
+        user: user_info_from(user),
         recommendations,
         filtered_count,
     }))
@@ -489,10 +489,7 @@ async fn debug_recommendation_handler(
         .collect();
 
     Ok(Json(DebugRecommendationResponse {
-        user: UserInfo {
-            id: user.id,
-            name: user.name.clone(),
-        },
+        user: user_info_from(user),
         recommendations,
         filtered_count: output.filtered_count,
         candidate_count: debug.candidate_count,
@@ -504,15 +501,18 @@ async fn debug_recommendation_handler(
     }))
 }
 
+fn user_info_from(user: &User) -> UserInfo {
+    UserInfo {
+        id: user.id,
+        name: user.name.clone(),
+        top_categories: user.profile.top_categories(3),
+        budget_min: user.profile.budget_min,
+        budget_max: user.profile.budget_max,
+    }
+}
+
 async fn users_handler(State(state): State<Arc<AppState>>) -> Json<UsersResponse> {
-    let users = state
-        .users
-        .iter()
-        .map(|u| UserInfo {
-            id: u.id,
-            name: u.name.clone(),
-        })
-        .collect();
+    let users = state.users.iter().map(user_info_from).collect();
     Json(UsersResponse { users })
 }
 
@@ -680,63 +680,161 @@ fn contains_cjk_text(text: &str) -> bool {
 // Data initialization
 // ============================================================================
 
+const USER_SEED_COUNT: usize = 24;
+
 fn init_users() -> Vec<User> {
+    let all_category_weights: Vec<(&str, f32)> = PRODUCT_CATEGORIES
+        .iter()
+        .map(|category| (*category, 0.4))
+        .collect();
+    let all_category_refs: Vec<(&str, f32)> = all_category_weights
+        .iter()
+        .map(|(category, weight)| (*category, *weight))
+        .collect();
+
     vec![
-        // Single-interest users.
-        User {
-            id: 1,
-            name: "Dev Xiaoming (Electronics + Books)".into(),
-            embedding: generate_user_embedding(&["Electronics", "Books"]),
-        },
-        User {
-            id: 2,
-            name: "Home Enthusiast Xiaohong (Home)".into(),
-            embedding: generate_user_embedding(&["Home"]),
-        },
-        User {
-            id: 3,
-            name: "Fashion Fan Xiaomei (Clothing)".into(),
-            embedding: generate_user_embedding(&["Clothing"]),
-        },
-        // Dual-interest users.
-        User {
-            id: 4,
-            name: "Gadget Geek (Electronics)".into(),
-            embedding: generate_user_embedding(&["Electronics"]),
-        },
-        User {
-            id: 5,
-            name: "Bookworm (Books)".into(),
-            embedding: generate_user_embedding(&["Books"]),
-        },
-        User {
-            id: 6,
-            name: "Lifestyle Maven (Home + Clothing)".into(),
-            embedding: generate_user_embedding(&["Home", "Clothing"]),
-        },
-        // Multi-category users.
-        User {
-            id: 7,
-            name: "All-Rounder (All Categories)".into(),
-            embedding: generate_user_embedding(&["Electronics", "Books", "Home", "Clothing"]),
-        },
-        User {
-            id: 8,
-            name: "Tech Homebody (Electronics + Home)".into(),
-            embedding: generate_user_embedding(&["Electronics", "Home"]),
-        },
-        // Cold-start users with random embeddings.
-        User {
-            id: 9,
-            name: "New User A (Random)".into(),
-            embedding: generate_random_embedding(),
-        },
-        User {
-            id: 10,
-            name: "New User B (Random)".into(),
-            embedding: generate_random_embedding(),
-        },
+        build_user(
+            1,
+            "Gadget Geek (Electronics)",
+            &[("Electronics", 1.0)],
+            50.0,
+            500.0,
+        ),
+        build_user(2, "Bookworm (Books)", &[("Books", 1.0)], 10.0, 80.0),
+        build_user(3, "Home Enthusiast (Home)", &[("Home", 1.0)], 20.0, 200.0),
+        build_user(
+            4,
+            "Fashion Fan (Clothing)",
+            &[("Clothing", 1.0)],
+            30.0,
+            300.0,
+        ),
+        build_user(5, "Fitness Pro (Sports)", &[("Sports", 1.0)], 25.0, 250.0),
+        build_user(6, "Beauty Lover (Beauty)", &[("Beauty", 1.0)], 15.0, 150.0),
+        build_user(7, "Toy Collector (Toys)", &[("Toys", 1.0)], 10.0, 120.0),
+        build_user(8, "Foodie (Food)", &[("Food", 1.0)], 5.0, 80.0),
+        build_user(
+            9,
+            "Car Enthusiast (Automotive)",
+            &[("Automotive", 1.0)],
+            40.0,
+            600.0,
+        ),
+        build_user(10, "Bargain Hunter (Misc)", &[("Misc", 1.0)], 5.0, 60.0),
+        build_user(
+            11,
+            "Fitness Tech (Electronics + Sports)",
+            &[("Electronics", 0.85), ("Sports", 0.75)],
+            80.0,
+            400.0,
+        ),
+        build_user(
+            12,
+            "Self-Care Reader (Books + Beauty)",
+            &[("Books", 0.8), ("Beauty", 0.55)],
+            15.0,
+            100.0,
+        ),
+        build_user(
+            13,
+            "Home Cook (Home + Food)",
+            &[("Home", 0.8), ("Food", 0.75)],
+            15.0,
+            150.0,
+        ),
+        build_user(
+            14,
+            "Style & Beauty (Clothing + Beauty)",
+            &[("Clothing", 0.85), ("Beauty", 0.8)],
+            40.0,
+            350.0,
+        ),
+        build_user(
+            15,
+            "Outdoor Driver (Sports + Automotive)",
+            &[("Sports", 0.8), ("Automotive", 0.65)],
+            50.0,
+            500.0,
+        ),
+        build_user(
+            16,
+            "Tech Parent (Toys + Electronics)",
+            &[("Toys", 0.8), ("Electronics", 0.7)],
+            30.0,
+            250.0,
+        ),
+        build_user(
+            17,
+            "Pantry Restock (Food + Home)",
+            &[("Food", 0.8), ("Home", 0.7)],
+            10.0,
+            120.0,
+        ),
+        build_user(
+            18,
+            "Tech Professional (Electronics + Books + Home)",
+            &[("Electronics", 0.75), ("Books", 0.65), ("Home", 0.55)],
+            40.0,
+            300.0,
+        ),
+        build_user(
+            19,
+            "Active Lifestyle (Sports + Clothing + Beauty)",
+            &[("Sports", 0.8), ("Clothing", 0.7), ("Beauty", 0.55)],
+            35.0,
+            280.0,
+        ),
+        build_user(20, "All-Category Explorer", &all_category_refs, 10.0, 400.0),
+        build_user(
+            21,
+            "Premium Shopper",
+            &[
+                ("Electronics", 0.75),
+                ("Automotive", 0.7),
+                ("Clothing", 0.6),
+            ],
+            200.0,
+            800.0,
+        ),
+        build_user(
+            22,
+            "Budget Shopper",
+            &[("Food", 0.85), ("Misc", 0.8), ("Home", 0.65)],
+            5.0,
+            40.0,
+        ),
+        cold_start_user(23, "New User A (Random)"),
+        cold_start_user(24, "New User B (Random)"),
     ]
+}
+
+fn cold_start_user(id: u64, name: &str) -> User {
+    User {
+        id,
+        name: name.to_string(),
+        embedding: generate_random_embedding(),
+        profile: UserProfile::default(),
+    }
+}
+
+fn seed_user_offline_data(storage: &Storage, user: &User) -> Result<()> {
+    storage.save_user(user)?;
+    if !user.profile.category_weights.is_empty() {
+        storage.save_user_preferences(user.id, &UserPreferences::from_profile(&user.profile))?;
+    }
+    Ok(())
+}
+
+fn should_reseed_users(storage: &Storage) -> Result<bool> {
+    if storage.users_count() == 0 {
+        return Ok(true);
+    }
+
+    let users = storage.get_all_users()?;
+    Ok(users.len() < USER_SEED_COUNT
+        || users
+            .iter()
+            .all(|user| user.profile.category_weights.is_empty()))
 }
 
 fn load_items_from_json(embedding_model: &embedding::EmbeddingModel) -> Result<Vec<Item>> {
@@ -819,14 +917,23 @@ pub fn init_data_with_storage(
         items
     };
 
-    let users = if storage.users_count() == 0 {
+    let users = if should_reseed_users(&storage)? {
+        if storage.users_count() > 0 {
+            println!("👤 Reseeding users with expanded offline profiles...");
+            storage.clear_users()?;
+            storage.clear_user_preferences()?;
+        } else {
+            println!("👤 Seeding users with offline profiles...");
+        }
+
         let users = init_users();
         for user in &users {
-            storage.save_user(user)?;
+            seed_user_offline_data(&storage, user)?;
         }
         println!("💾 Saved {} users to database", users.len());
         users
     } else {
+        println!("📂 Loading users from database...");
         storage.get_all_users()?
     };
 
@@ -1094,6 +1201,7 @@ mod tests {
             id: 1,
             name: "Test user".to_string(),
             embedding: vec![0.0; DIM],
+            profile: UserProfile::default(),
         }];
         let items = vec![test_item(10, "Books")];
         storage.save_user(&users[0]).unwrap();

@@ -1,8 +1,8 @@
 //! Ranking strategy implementations.
 
-use crate::model::Item;
+use crate::model::{Item, User};
 use crate::recommendation::explain::{reason_for, source_label};
-use crate::recommendation::features::{normalize_score, PriceStats};
+use crate::recommendation::features::{normalize_score, user_price_affinity, PriceStats};
 use crate::recommendation::recall::RecallSource;
 use crate::recommendation::types::{Candidate, RecommendedItem};
 use std::cmp::Ordering;
@@ -99,6 +99,7 @@ impl Ranker for MachineLearningReservedRanker {
 }
 
 pub(super) fn rank_candidate(
+    user: &User,
     item: &Item,
     candidate: &Candidate,
     category_scores: &HashMap<String, f32>,
@@ -123,7 +124,7 @@ pub(super) fn rank_candidate(
     let category_score = (base_category_score + category_preference * 0.25).clamp(0.0, 1.0);
     let feedback_score = ((category_preference * 0.4) + item_preference).clamp(-1.0, 1.0);
     let popularity = normalize_score(item.popularity);
-    let price_affinity = price_stats.affinity(item.price);
+    let price_affinity = user_price_affinity(user, item.price, price_stats);
     let novelty = 1.0 - popularity;
     let features = RankingFeatures {
         semantic_score,
