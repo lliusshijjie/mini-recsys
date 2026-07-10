@@ -237,6 +237,14 @@ fn build_user_recommendation_output(
             }),
         )
     })?;
+    let recent_events = state.storage.get_recent_events(uid).map_err(|e| {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: format!("Failed to get recent events: {}", e),
+            }),
+        )
+    })?;
     let filter = state.storage.get_user_filter(uid).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -254,6 +262,7 @@ fn build_user_recommendation_output(
         RecommendationConfig {
             ranking_strategy: RankingStrategyKind::from_env(),
             preferences: Some(preferences),
+            recent_events: recent_events.items,
             ..Default::default()
         },
     );

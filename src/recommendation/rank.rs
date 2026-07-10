@@ -3,6 +3,7 @@
 use crate::model::Item;
 use crate::recommendation::explain::{reason_for, source_label};
 use crate::recommendation::features::{normalize_score, PriceStats};
+use crate::recommendation::recall::RecallSource;
 use crate::recommendation::types::{Candidate, RecommendedItem};
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -137,6 +138,8 @@ pub(super) fn rank_candidate(
     let source = source_label(&candidate.sources);
     let reason = if feedback_score > 0.15 {
         "feedback_match".to_string()
+    } else if candidate.has_source(RecallSource::RecentItemSimilarity) {
+        "similar_to_recent_interest".to_string()
     } else {
         reason_for(&source, semantic_score, category_score)
     };

@@ -1,5 +1,5 @@
 use super::*;
-use crate::behavior::UserPreferences;
+use crate::behavior::{BehaviorEvent, EventType, UserPreferences};
 use crate::model::{category_base_vector, Item, User, DIM};
 use std::collections::HashSet;
 
@@ -257,4 +257,86 @@ fn output_includes_debug_metadata_for_evaluation() {
         output.debug.source_distribution.values().sum::<usize>(),
         output.items.len()
     );
+}
+
+#[test]
+fn recent_click_recall_adds_similar_items() {
+    let user = User {
+        id: 1,
+        name: "Recent interest user".to_string(),
+        embedding: vec![0.0; DIM],
+    };
+    let items = vec![
+        item(10, "Books", 0.20, 20.0),
+        item(11, "Books", 0.70, 22.0),
+        item(12, "Electronics", 0.95, 200.0),
+    ];
+    let recent_events = vec![BehaviorEvent::new(1, 10, EventType::Click, "Books")];
+
+    let output = build_recommendations(
+        &user,
+        &items,
+        &[],
+        &|_| false,
+        RecommendationConfig {
+            limit: 3,
+            exploration_slots: 0,
+            recent_events,
+            ..Default::default()
+        },
+    );
+
+    let similar_item = output
+        .items
+        .iter()
+        .find(|item| item.item_id == 11)
+        .expect("similar item should be recalled from recent click");
+
+    assert_eq!(similar_item.source, "recent_item_similarity");
+    assert_eq!(similar_item.reason, "similar_to_recent_interest");
+    assert!(output
+        .debug
+        .source_distribution
+        .contains_key("recent_item_similarity"));
+}
+
+#[test]
+fn recent_item_recall_ignores_impression_and_dismiss_events() {
+    let user = User {
+        id: 1,
+        name: "Passive event user".to_string(),
+        embedding: vec![0.0; DIM],
+    };
+    let items = vec![
+        item(10, "Books", 0.20, 20.0),
+        item(11, "Books", 0.70, 22.0),
+        item(12, "Electronics", 0.95, 200.0),
+    ];
+    let recent_events = vec![
+        BehaviorEvent::new(1, 10, EventType::Impression, "Books"),
+        BehaviorEvent::new(1, 10, EventType::Dismiss, "Books"),
+    ];
+
+    let output = build_recommendations(
+        &user,
+        &items,
+        &[],
+        &|_| false,
+        RecommendationConfig {
+            limit: 3,
+            exploration_slots: 0,
+            recent_events,
+            ..Default::default()
+        },
+    );
+
+    assert!(!output
+        .debug
+        .candidates
+        .iter()
+        .any(|candidate| candidate.source == "recent_item_similarity"));
+    assert!(!output
+        .debug
+        .source_distribution
+        .contains_key("recent_item_similarity"));
 }

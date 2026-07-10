@@ -1,7 +1,8 @@
 //! Shared recommendation data types.
 
-use crate::behavior::UserPreferences;
+use crate::behavior::{BehaviorEvent, UserPreferences};
 use crate::recommendation::rank::RankingStrategyKind;
+use crate::recommendation::recall::RecallSource;
 use std::collections::{HashMap, HashSet};
 
 const DEFAULT_LIMIT: usize = 10;
@@ -15,6 +16,7 @@ pub struct RecommendationConfig {
     pub exploration_slots: usize,
     pub ranking_strategy: RankingStrategyKind,
     pub preferences: Option<UserPreferences>,
+    pub recent_events: Vec<BehaviorEvent>,
 }
 
 impl Default for RecommendationConfig {
@@ -25,6 +27,7 @@ impl Default for RecommendationConfig {
             exploration_slots: DEFAULT_EXPLORATION_SLOTS,
             ranking_strategy: RankingStrategyKind::FixedWeights,
             preferences: None,
+            recent_events: Vec::new(),
         }
     }
 }
@@ -74,7 +77,7 @@ pub struct RecommendedItem {
 pub(super) struct Candidate {
     pub item_id: u64,
     pub semantic_score: f32,
-    pub sources: HashSet<&'static str>,
+    pub sources: HashSet<RecallSource>,
     pub preferences: Option<UserPreferences>,
 }
 
@@ -88,7 +91,11 @@ impl Candidate {
         }
     }
 
-    pub(super) fn add_source(&mut self, source: &'static str) {
+    pub(super) fn add_source(&mut self, source: RecallSource) {
         self.sources.insert(source);
+    }
+
+    pub(super) fn has_source(&self, source: RecallSource) -> bool {
+        self.sources.contains(&source)
     }
 }
