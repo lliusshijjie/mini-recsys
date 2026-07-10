@@ -49,4 +49,7 @@ pip-delete-this-directory.txt
 # Models
 /models/
 *.onnx
+
+# Local ONNX Runtime (run scripts/setup_ort.ps1)
+/libs/
 *.json

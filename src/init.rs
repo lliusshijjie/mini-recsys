@@ -830,11 +830,15 @@ fn should_reseed_users(storage: &Storage) -> Result<bool> {
         return Ok(true);
     }
 
-    let users = storage.get_all_users()?;
-    Ok(users.len() < USER_SEED_COUNT
-        || users
-            .iter()
-            .all(|user| user.profile.category_weights.is_empty()))
+    match storage.get_all_users() {
+        Ok(users) => Ok(
+            users.len() < USER_SEED_COUNT
+                || users
+                    .iter()
+                    .all(|user| user.profile.category_weights.is_empty()),
+        ),
+        Err(_) => Ok(true),
+    }
 }
 
 fn load_items_from_json(embedding_model: &embedding::EmbeddingModel) -> Result<Vec<Item>> {
@@ -1021,6 +1025,8 @@ async fn graceful_shutdown(storage: Arc<Storage>, config: AppConfig) {
 }
 
 pub fn load_embedding_model(config: &AppConfig) -> Option<Arc<embedding::EmbeddingModel>> {
+    configure_onnx_runtime_dylib();
+
     if !config.model_path.exists() || !config.tokenizer_path.exists() {
         eprintln!(
             "⚠️  Embedding assets not found at {} and {}; /search will be unavailable\n",
@@ -1052,6 +1058,27 @@ pub fn load_embedding_model(config: &AppConfig) -> Option<Arc<embedding::Embeddi
                 "⚠️  Failed to initialize ONNX Runtime; set ORT_DYLIB_PATH to a valid libonnxruntime shared library\n   /search will be unavailable\n"
             );
             None
+        }
+    }
+}
+
+fn configure_onnx_runtime_dylib() {
+    if std::env::var_os("ORT_DYLIB_PATH").is_some() {
+        return;
+    }
+
+    let candidates = [
+        "libs/onnxruntime/onnxruntime.dll",
+        "libs/onnxruntime/libonnxruntime.so",
+        "libs/onnxruntime/libonnxruntime.dylib",
+    ];
+
+    for candidate in candidates {
+        let path = std::path::Path::new(candidate);
+        if path.exists() {
+            std::env::set_var("ORT_DYLIB_PATH", path);
+            println!("🔗 Using ONNX Runtime from {}", path.display());
+            return;
         }
     }
 }
