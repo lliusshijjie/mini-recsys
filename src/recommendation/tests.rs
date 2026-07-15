@@ -2,8 +2,9 @@ use super::*;
 use crate::behavior::{BehaviorEvent, EventType, UserPreferences};
 use crate::ffi::{HnswConfig, HnswIndex};
 use crate::model::{category_base_vector, Item, User, UserProfile, DIM};
+use crate::recommendation::service::{UserContext, UserContextCache, UserContextCacheConfig};
 use std::collections::HashSet;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 fn normalized_category(category: &str) -> Vec<f32> {
     let base = category_base_vector(category);
@@ -21,6 +22,56 @@ fn item(id: u64, category: &str, popularity: f32, price: f32) -> Item {
         embedding: normalized_category(category),
         popularity,
     }
+}
+
+fn user_context(category: &str, item_id: u64) -> UserContext {
+    let mut preferences = UserPreferences::default();
+    preferences.set_category_weight(category, 0.7);
+    UserContext {
+        preferences,
+        recent_events: vec![BehaviorEvent::new(1, item_id, EventType::Click, category)],
+    }
+}
+
+#[test]
+fn user_context_cache_hits_before_ttl_and_misses_after_invalidation() {
+    let cache = UserContextCache::new(UserContextCacheConfig {
+        ttl: Duration::from_secs(60),
+        max_users: 8,
+    });
+    let context = user_context("Books", 10);
+
+    assert!(cache.get(1).is_none());
+    cache.insert(1, context.clone());
+
+    let cached = cache.get(1).expect("context should be cached");
+    assert_eq!(cached.preferences.category_weight("Books"), 0.7);
+    assert_eq!(cached.recent_events[0].item_id, 10);
+
+    cache.invalidate(1);
+    assert!(cache.get(1).is_none());
+}
+
+#[test]
+fn user_context_cache_expires_and_evicts_oldest_user() {
+    let expiring_cache = UserContextCache::new(UserContextCacheConfig {
+        ttl: Duration::from_millis(0),
+        max_users: 8,
+    });
+    expiring_cache.insert(1, user_context("Books", 10));
+    assert!(expiring_cache.get(1).is_none());
+
+    let bounded_cache = UserContextCache::new(UserContextCacheConfig {
+        ttl: Duration::from_secs(60),
+        max_users: 2,
+    });
+    bounded_cache.insert(1, user_context("Books", 10));
+    bounded_cache.insert(2, user_context("Electronics", 20));
+    bounded_cache.insert(3, user_context("Home", 30));
+
+    assert!(bounded_cache.get(1).is_none());
+    assert!(bounded_cache.get(2).is_some());
+    assert!(bounded_cache.get(3).is_some());
 }
 
 #[test]

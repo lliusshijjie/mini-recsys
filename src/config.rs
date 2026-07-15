@@ -8,6 +8,11 @@ const DEFAULT_DATA_DIR: &str = "data";
 const DEFAULT_MODEL_PATH: &str = "models/all-MiniLM-L6-v2.onnx";
 const DEFAULT_TOKENIZER_PATH: &str = "models/tokenizer.json";
 const DEFAULT_CORS_ORIGIN: &str = "http://localhost:5173";
+const DEFAULT_RECOMMEND_TIMEOUT_MS: u64 = 150;
+const DEFAULT_USER_CONTEXT_CACHE_TTL_MS: u64 = 1000;
+const DEFAULT_USER_CONTEXT_CACHE_MAX_USERS: usize = 1024;
+const DEFAULT_BATCH_MAX_USERS: usize = 32;
+const DEFAULT_RECALL_PARALLEL_MIN_ITEMS: usize = 10_000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AppConfig {
@@ -16,6 +21,11 @@ pub struct AppConfig {
     pub model_path: PathBuf,
     pub tokenizer_path: PathBuf,
     pub cors_origin: String,
+    pub recommend_timeout_ms: u64,
+    pub user_context_cache_ttl_ms: u64,
+    pub user_context_cache_max_users: usize,
+    pub batch_max_users: usize,
+    pub recall_parallel_min_items: usize,
 }
 
 impl AppConfig {
@@ -44,6 +54,31 @@ impl AppConfig {
                 get("TOKENIZER_PATH").unwrap_or_else(|| DEFAULT_TOKENIZER_PATH.into()),
             ),
             cors_origin: get("CORS_ORIGIN").unwrap_or_else(|| DEFAULT_CORS_ORIGIN.into()),
+            recommend_timeout_ms: parse_u64_env(
+                &get,
+                "MINI_RECSYS_RECOMMEND_TIMEOUT_MS",
+                DEFAULT_RECOMMEND_TIMEOUT_MS,
+            )?,
+            user_context_cache_ttl_ms: parse_u64_env(
+                &get,
+                "MINI_RECSYS_USER_CONTEXT_CACHE_TTL_MS",
+                DEFAULT_USER_CONTEXT_CACHE_TTL_MS,
+            )?,
+            user_context_cache_max_users: parse_usize_env(
+                &get,
+                "MINI_RECSYS_USER_CONTEXT_CACHE_MAX_USERS",
+                DEFAULT_USER_CONTEXT_CACHE_MAX_USERS,
+            )?,
+            batch_max_users: parse_usize_env(
+                &get,
+                "MINI_RECSYS_BATCH_MAX_USERS",
+                DEFAULT_BATCH_MAX_USERS,
+            )?,
+            recall_parallel_min_items: parse_usize_env(
+                &get,
+                "MINI_RECSYS_RECALL_PARALLEL_MIN_ITEMS",
+                DEFAULT_RECALL_PARALLEL_MIN_ITEMS,
+            )?,
         })
     }
 
@@ -69,6 +104,30 @@ impl AppConfig {
 
     pub fn tantivy_path_str(&self) -> String {
         path_to_string(&self.tantivy_path())
+    }
+}
+
+fn parse_u64_env<F>(get: &F, key: &str, default: u64) -> Result<u64>
+where
+    F: Fn(&str) -> Option<String>,
+{
+    match get(key) {
+        Some(value) => value
+            .parse::<u64>()
+            .with_context(|| format!("Invalid {} value: {}", key, value)),
+        None => Ok(default),
+    }
+}
+
+fn parse_usize_env<F>(get: &F, key: &str, default: usize) -> Result<usize>
+where
+    F: Fn(&str) -> Option<String>,
+{
+    match get(key) {
+        Some(value) => value
+            .parse::<usize>()
+            .with_context(|| format!("Invalid {} value: {}", key, value)),
+        None => Ok(default),
     }
 }
 
@@ -111,6 +170,11 @@ mod tests {
             PathBuf::from("models/tokenizer.json")
         );
         assert_eq!(config.cors_origin, "http://localhost:5173");
+        assert_eq!(config.recommend_timeout_ms, 150);
+        assert_eq!(config.user_context_cache_ttl_ms, 1000);
+        assert_eq!(config.user_context_cache_max_users, 1024);
+        assert_eq!(config.batch_max_users, 32);
+        assert_eq!(config.recall_parallel_min_items, 10_000);
     }
 
     #[test]
@@ -121,6 +185,11 @@ mod tests {
             ("MODEL_PATH", "/models/model.onnx"),
             ("TOKENIZER_PATH", "/models/tokenizer.json"),
             ("CORS_ORIGIN", "https://example.test"),
+            ("MINI_RECSYS_RECOMMEND_TIMEOUT_MS", "250"),
+            ("MINI_RECSYS_USER_CONTEXT_CACHE_TTL_MS", "5000"),
+            ("MINI_RECSYS_USER_CONTEXT_CACHE_MAX_USERS", "64"),
+            ("MINI_RECSYS_BATCH_MAX_USERS", "8"),
+            ("MINI_RECSYS_RECALL_PARALLEL_MIN_ITEMS", "25000"),
         ]);
 
         assert_eq!(config.port, 8080);
@@ -135,6 +204,11 @@ mod tests {
             PathBuf::from("/models/tokenizer.json")
         );
         assert_eq!(config.cors_origin, "https://example.test");
+        assert_eq!(config.recommend_timeout_ms, 250);
+        assert_eq!(config.user_context_cache_ttl_ms, 5000);
+        assert_eq!(config.user_context_cache_max_users, 64);
+        assert_eq!(config.batch_max_users, 8);
+        assert_eq!(config.recall_parallel_min_items, 25_000);
     }
 
     #[test]
@@ -144,5 +218,22 @@ mod tests {
         let error = AppConfig::from_getter(|key| map.get(key).cloned()).unwrap_err();
 
         assert!(error.to_string().contains("PORT"));
+    }
+
+    #[test]
+    fn invalid_recommendation_serving_values_return_error() {
+        for key in [
+            "MINI_RECSYS_RECOMMEND_TIMEOUT_MS",
+            "MINI_RECSYS_USER_CONTEXT_CACHE_TTL_MS",
+            "MINI_RECSYS_USER_CONTEXT_CACHE_MAX_USERS",
+            "MINI_RECSYS_BATCH_MAX_USERS",
+            "MINI_RECSYS_RECALL_PARALLEL_MIN_ITEMS",
+        ] {
+            let map = HashMap::from([(key.to_string(), "not-a-number".to_string())]);
+
+            let error = AppConfig::from_getter(|lookup| map.get(lookup).cloned()).unwrap_err();
+
+            assert!(error.to_string().contains(key));
+        }
     }
 }
