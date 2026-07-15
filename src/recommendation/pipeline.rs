@@ -45,6 +45,7 @@ pub fn build_recommendations_with_indexes(
     let category_scores = user_category_scores_for_categories(user, indexes.categories());
     let recall_output = recall_candidates(items, indexes, semantic_hits, &category_scores, &config);
     let mut stage_durations_micros = recall_output.stage_durations_micros;
+    let quality_metrics = recall_output.quality_metrics;
     let candidates = recall_output.candidates;
     let debug_candidates: Vec<DebugCandidate> = candidates
         .values()
@@ -110,6 +111,7 @@ pub fn build_recommendations_with_indexes(
             category_distribution,
             source_distribution,
             stage_durations_micros,
+            quality_metrics,
         },
     }
 }

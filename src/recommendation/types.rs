@@ -17,6 +17,8 @@ pub struct RecommendationConfig {
     pub ranking_strategy: RankingStrategyKind,
     pub preferences: Option<UserPreferences>,
     pub recent_events: Vec<BehaviorEvent>,
+    pub recent_recall_mode: RecentRecallMode,
+    pub recent_ann_hits: Vec<(u64, Vec<(u64, f32)>)>,
 }
 
 impl Default for RecommendationConfig {
@@ -28,6 +30,25 @@ impl Default for RecommendationConfig {
             ranking_strategy: RankingStrategyKind::FixedWeights,
             preferences: None,
             recent_events: Vec::new(),
+            recent_recall_mode: RecentRecallMode::from_env(),
+            recent_ann_hits: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecentRecallMode {
+    Exact,
+    Shadow,
+    Ann,
+}
+
+impl RecentRecallMode {
+    pub fn from_env() -> Self {
+        match std::env::var("MINI_RECSYS_RECENT_RECALL_MODE") {
+            Ok(value) if value.eq_ignore_ascii_case("shadow") => Self::Shadow,
+            Ok(value) if value.eq_ignore_ascii_case("ann") => Self::Ann,
+            _ => Self::Exact,
         }
     }
 }
@@ -46,6 +67,7 @@ pub struct RecommendationDebug {
     pub category_distribution: HashMap<String, usize>,
     pub source_distribution: HashMap<String, usize>,
     pub stage_durations_micros: HashMap<String, u64>,
+    pub quality_metrics: HashMap<String, f32>,
 }
 
 #[derive(Debug, Clone)]

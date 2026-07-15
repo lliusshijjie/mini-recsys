@@ -17,4 +17,5 @@ pub use indexes::RecommendationIndexes;
 pub use pipeline::build_recommendations;
 pub use pipeline::build_recommendations_with_indexes;
 pub use rank::RankingStrategyKind;
-pub use types::{RecommendationConfig, RecommendationOutput, RecommendedItem};
+pub(crate) use recall::recent_positive_seed_ids;
+pub use types::{RecentRecallMode, RecommendationConfig, RecommendationOutput, RecommendedItem};

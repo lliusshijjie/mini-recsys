@@ -4,7 +4,7 @@ use crate::behavior::{BehaviorEvent, EventType};
 use crate::model::Item;
 use crate::recommendation::features::normalize_score;
 use crate::recommendation::indexes::RecommendationIndexes;
-use crate::recommendation::types::{Candidate, RecommendationConfig};
+use crate::recommendation::types::{Candidate, RecentRecallMode, RecommendationConfig};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
@@ -45,12 +45,14 @@ struct RecallContext<'a> {
     semantic_hits: &'a [(u64, f32)],
     category_scores: &'a HashMap<String, f32>,
     recent_events: &'a [BehaviorEvent],
+    recent_ann_hits: &'a [(u64, Vec<(u64, f32)>)],
     pool_size: usize,
 }
 
 pub(super) struct RecallOutput {
     pub candidates: HashMap<u64, Candidate>,
     pub stage_durations_micros: HashMap<String, u64>,
+    pub quality_metrics: HashMap<String, f32>,
 }
 
 pub(super) fn recall_candidates(
@@ -66,10 +68,12 @@ pub(super) fn recall_candidates(
         semantic_hits,
         category_scores,
         recent_events: &config.recent_events,
+        recent_ann_hits: &config.recent_ann_hits,
         pool_size: (config.limit * RECALL_MULTIPLIER).max(MIN_RECALL_POOL),
     };
     let mut candidates = HashMap::new();
     let mut stage_durations_micros = HashMap::new();
+    let mut quality_metrics = HashMap::new();
 
     let (hits, elapsed) = timed(|| recall_semantic_ann(&context));
     stage_durations_micros.insert("semantic_ann".to_string(), elapsed.as_micros() as u64);
@@ -79,7 +83,9 @@ pub(super) fn recall_candidates(
     stage_durations_micros.insert("category_recall".to_string(), elapsed.as_micros() as u64);
     merge_hits(&mut candidates, hits);
 
-    let (hits, elapsed) = timed(|| recall_recent_item_similarity(&context));
+    let (hits, elapsed) = timed(|| {
+        recall_recent_item_similarity(&context, config.recent_recall_mode, &mut quality_metrics)
+    });
     stage_durations_micros.insert("recent_ann".to_string(), elapsed.as_micros() as u64);
     merge_hits(&mut candidates, hits);
 
@@ -90,6 +96,7 @@ pub(super) fn recall_candidates(
     RecallOutput {
         candidates,
         stage_durations_micros,
+        quality_metrics,
     }
 }
 
@@ -163,7 +170,28 @@ fn recall_category_profile(context: &RecallContext<'_>) -> Vec<RecallHit> {
         .collect()
 }
 
-fn recall_recent_item_similarity(context: &RecallContext<'_>) -> Vec<RecallHit> {
+fn recall_recent_item_similarity(
+    context: &RecallContext<'_>,
+    mode: RecentRecallMode,
+    quality_metrics: &mut HashMap<String, f32>,
+) -> Vec<RecallHit> {
+    let exact_hits = || recall_recent_item_similarity_exact(context);
+    match mode {
+        RecentRecallMode::Exact => exact_hits(),
+        RecentRecallMode::Ann => recall_recent_item_similarity_ann(context),
+        RecentRecallMode::Shadow => {
+            let exact = exact_hits();
+            let ann = recall_recent_item_similarity_ann(context);
+            quality_metrics.insert(
+                "recent_ann_overlap".to_string(),
+                overlap_ratio(&exact, &ann),
+            );
+            exact
+        }
+    }
+}
+
+fn recall_recent_item_similarity_exact(context: &RecallContext<'_>) -> Vec<RecallHit> {
     let seed_ids = recent_positive_seed_ids(context.recent_events);
     if seed_ids.is_empty() {
         return Vec::new();
@@ -196,13 +224,79 @@ fn recall_recent_item_similarity(context: &RecallContext<'_>) -> Vec<RecallHit> 
     hits
 }
 
-fn recent_positive_seed_ids(recent_events: &[BehaviorEvent]) -> HashSet<u64> {
-    recent_events
+fn recall_recent_item_similarity_ann(context: &RecallContext<'_>) -> Vec<RecallHit> {
+    let seed_ids = recent_positive_seed_ids(context.recent_events);
+    if seed_ids.is_empty() {
+        return Vec::new();
+    }
+
+    let seed_set: HashSet<u64> = seed_ids.iter().copied().collect();
+    let seed_categories: HashMap<u64, String> = seed_ids
         .iter()
-        .rev()
-        .filter(|event| matches!(event.event_type, EventType::Click | EventType::Like))
-        .map(|event| event.item_id)
-        .collect()
+        .filter_map(|seed_id| {
+            context
+                .indexes
+                .item(context.items, *seed_id)
+                .map(|item| (*seed_id, item.category.clone()))
+        })
+        .collect();
+    let mut hits = Vec::new();
+
+    for (seed_id, ann_hits) in context.recent_ann_hits {
+        let Some(seed_category) = seed_categories.get(seed_id) else {
+            continue;
+        };
+        for (item_id, score) in ann_hits {
+            if seed_set.contains(item_id) || *score < RECENT_SIMILARITY_MIN_SCORE {
+                continue;
+            }
+            let Some(item) = context.indexes.item(context.items, *item_id) else {
+                continue;
+            };
+            if item.category != *seed_category {
+                continue;
+            }
+            hits.push(RecallHit {
+                item_id: *item_id,
+                score: normalize_score(*score),
+                source: RecallSource::RecentItemSimilarity,
+            });
+        }
+    }
+
+    hits.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+    hits.dedup_by_key(|hit| hit.item_id);
+    hits.truncate(context.pool_size);
+    hits
+}
+
+pub(crate) fn recent_positive_seed_ids(recent_events: &[BehaviorEvent]) -> Vec<u64> {
+    let mut seed_ids = Vec::new();
+    for event in recent_events.iter().rev() {
+        if !matches!(event.event_type, EventType::Click | EventType::Like) {
+            continue;
+        }
+        if seed_ids.contains(&event.item_id) {
+            continue;
+        }
+        seed_ids.push(event.item_id);
+        if seed_ids.len() >= 5 {
+            break;
+        }
+    }
+    seed_ids
+}
+
+fn overlap_ratio(left: &[RecallHit], right: &[RecallHit]) -> f32 {
+    if left.is_empty() {
+        return if right.is_empty() { 1.0 } else { 0.0 };
+    }
+    let right_ids: HashSet<u64> = right.iter().map(|hit| hit.item_id).collect();
+    let overlap = left
+        .iter()
+        .filter(|hit| right_ids.contains(&hit.item_id))
+        .count();
+    overlap as f32 / left.len() as f32
 }
 
 fn recall_popular_fallback(context: &RecallContext<'_>) -> Vec<RecallHit> {
