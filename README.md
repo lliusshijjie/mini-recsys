@@ -313,6 +313,37 @@ shadow-mode `recent_ann_overlap` metric. The default guardrails are:
 - `MINI_RECSYS_RECENT_RECALL_THRESHOLD=0.95`
 - `MINI_RECSYS_TOP10_OVERLAP_THRESHOLD=0.90`
 
+### Observed Local Results
+
+The following numbers were collected on 2026-07-15 with `cargo test --release`
+on a local Windows workstation. They use deterministic synthetic vectors and
+should be treated as local trend data, not production traffic.
+
+HNSW matrix settings: `dim=384`, `k=100`, `queries=256`,
+`concurrency=1,8,32`.
+
+| Dataset | Concurrency | QPS | p50 | p95 | p99 | Build time |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 10,000 | 1 | 4,424 | 204us | 350us | 480us | 3.94s |
+| 10,000 | 8 | 21,739 | 283us | 532us | 880us | 3.94s |
+| 10,000 | 32 | 27,659 | 394us | 639us | 993us | 3.94s |
+| 50,000 | 1 | 1,716 | 535us | 849us | 941us | 49.47s |
+| 50,000 | 8 | 8,087 | 821us | 1.37ms | 1.70ms | 49.47s |
+| 50,000 | 32 | 11,626 | 1.15ms | 1.69ms | 3.18ms | 49.47s |
+
+Recent-item recall quality settings: one recent positive event, synthetic item
+catalog, exact same-category scan compared with ANN candidates.
+
+| Dataset | `ann_k` | Exact | ANN | Speedup | Recall overlap | Top-10 overlap | Result |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| 10,000 | 200 | 2.94ms | 1.23ms | 2.4x | 1.000 | 1.000 | Pass |
+| 50,000 | 200 | 12.94ms | 4.08ms | 3.2x | 0.750 | 0.333 | Fails quality gate |
+| 50,000 | 1,000 | 12.76ms | 6.09ms | 2.1x | 1.000 | 1.000 | Pass |
+
+The practical rollout default is to keep `MINI_RECSYS_RECENT_RECALL_MODE=shadow`
+first, watch `recent_ann_overlap`, and raise `MINI_RECSYS_RECENT_ANN_K` before
+switching to `ann` on larger catalogs.
+
 Run this before committing frontend or API-response changes:
 
 ```bash
