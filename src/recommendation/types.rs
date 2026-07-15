@@ -19,6 +19,7 @@ pub struct RecommendationConfig {
     pub recent_events: Vec<BehaviorEvent>,
     pub recent_recall_mode: RecentRecallMode,
     pub recent_ann_hits: Vec<(u64, Vec<(u64, f32)>)>,
+    pub recall_parallel_min_items: usize,
 }
 
 impl Default for RecommendationConfig {
@@ -32,6 +33,7 @@ impl Default for RecommendationConfig {
             recent_events: Vec::new(),
             recent_recall_mode: RecentRecallMode::from_env(),
             recent_ann_hits: Vec::new(),
+            recall_parallel_min_items: usize::MAX,
         }
     }
 }

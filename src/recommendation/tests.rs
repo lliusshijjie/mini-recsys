@@ -2,8 +2,9 @@ use super::*;
 use crate::behavior::{BehaviorEvent, EventType, UserPreferences};
 use crate::ffi::{HnswConfig, HnswIndex};
 use crate::model::{category_base_vector, Item, User, UserProfile, DIM};
+use crate::recommendation::service::{UserContext, UserContextCache, UserContextCacheConfig};
 use std::collections::HashSet;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 fn normalized_category(category: &str) -> Vec<f32> {
     let base = category_base_vector(category);
@@ -21,6 +22,56 @@ fn item(id: u64, category: &str, popularity: f32, price: f32) -> Item {
         embedding: normalized_category(category),
         popularity,
     }
+}
+
+fn user_context(category: &str, item_id: u64) -> UserContext {
+    let mut preferences = UserPreferences::default();
+    preferences.set_category_weight(category, 0.7);
+    UserContext {
+        preferences,
+        recent_events: vec![BehaviorEvent::new(1, item_id, EventType::Click, category)],
+    }
+}
+
+#[test]
+fn user_context_cache_hits_before_ttl_and_misses_after_invalidation() {
+    let cache = UserContextCache::new(UserContextCacheConfig {
+        ttl: Duration::from_secs(60),
+        max_users: 8,
+    });
+    let context = user_context("Books", 10);
+
+    assert!(cache.get(1).is_none());
+    cache.insert(1, context.clone());
+
+    let cached = cache.get(1).expect("context should be cached");
+    assert_eq!(cached.preferences.category_weight("Books"), 0.7);
+    assert_eq!(cached.recent_events[0].item_id, 10);
+
+    cache.invalidate(1);
+    assert!(cache.get(1).is_none());
+}
+
+#[test]
+fn user_context_cache_expires_and_evicts_oldest_user() {
+    let expiring_cache = UserContextCache::new(UserContextCacheConfig {
+        ttl: Duration::from_millis(0),
+        max_users: 8,
+    });
+    expiring_cache.insert(1, user_context("Books", 10));
+    assert!(expiring_cache.get(1).is_none());
+
+    let bounded_cache = UserContextCache::new(UserContextCacheConfig {
+        ttl: Duration::from_secs(60),
+        max_users: 2,
+    });
+    bounded_cache.insert(1, user_context("Books", 10));
+    bounded_cache.insert(2, user_context("Electronics", 20));
+    bounded_cache.insert(3, user_context("Home", 30));
+
+    assert!(bounded_cache.get(1).is_none());
+    assert!(bounded_cache.get(2).is_some());
+    assert!(bounded_cache.get(3).is_some());
 }
 
 #[test]
@@ -472,6 +523,59 @@ fn recent_shadow_mode_records_quality_but_keeps_exact_results() {
         .debug
         .quality_metrics
         .contains_key("recent_ann_overlap"));
+}
+
+#[test]
+fn parallel_recall_matches_serial_recall_output() {
+    let user = User {
+        id: 1,
+        name: "Parallel recall user".to_string(),
+        embedding: normalized_category("Books"),
+        profile: UserProfile::build(&[("Books", 0.9), ("Electronics", 0.4)], 10.0, 300.0),
+    };
+    let items = vec![
+        item(1, "Books", 0.20, 20.0),
+        item(2, "Books", 0.80, 22.0),
+        item(3, "Electronics", 0.70, 120.0),
+        item(4, "Home", 0.95, 40.0),
+        item(5, "Books", 0.60, 18.0),
+    ];
+    let semantic_hits = vec![(2, 0.92), (3, 0.40)];
+    let recent_events = vec![BehaviorEvent::new(1, 1, EventType::Click, "Books")];
+
+    let serial = build_recommendations(
+        &user,
+        &items,
+        &semantic_hits,
+        &|_| false,
+        RecommendationConfig {
+            limit: 4,
+            exploration_slots: 0,
+            recent_events: recent_events.clone(),
+            recall_parallel_min_items: usize::MAX,
+            ..Default::default()
+        },
+    );
+    let parallel = build_recommendations(
+        &user,
+        &items,
+        &semantic_hits,
+        &|_| false,
+        RecommendationConfig {
+            limit: 4,
+            exploration_slots: 0,
+            recent_events,
+            recall_parallel_min_items: 0,
+            ..Default::default()
+        },
+    );
+
+    assert_eq!(top_item_ids(&serial), top_item_ids(&parallel));
+    assert_eq!(serial.debug.candidate_count, parallel.debug.candidate_count);
+    assert_eq!(
+        serial.debug.source_distribution,
+        parallel.debug.source_distribution
+    );
 }
 
 #[test]

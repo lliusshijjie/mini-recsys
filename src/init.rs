@@ -11,8 +11,8 @@ use crate::model::{
 };
 use crate::observability::Metrics;
 use crate::recommendation::{
-    build_recommendations_with_indexes, recent_positive_seed_ids, RankingStrategyKind,
-    RecentRecallMode, RecommendationConfig, RecommendationIndexes, RecommendationOutput,
+    RecommendationIndexes, RecommendationOutput, RecommendationService,
+    RecommendationServiceConfig, RecommendationServiceError, RecommendationServiceOutput,
     RecommendedItem as PipelineRecommendedItem,
 };
 use crate::storage::Storage;
@@ -35,7 +35,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tower_http::cors::{Any, CorsLayer};
 
 // ============================================================================
@@ -44,10 +44,10 @@ use tower_http::cors::{Any, CorsLayer};
 
 pub struct AppState {
     pub storage: Arc<Storage>,
-    pub users: Vec<User>,
-    pub items: Vec<Item>,
+    pub users: Arc<Vec<User>>,
+    pub items: Arc<Vec<Item>>,
     pub item_map: HashMap<u64, usize>,
-    pub recommendation_indexes: RecommendationIndexes,
+    pub recommendation_service: Arc<RecommendationService>,
     pub hnsw_index: Arc<HnswIndex>,
     pub embedding_model: Option<Arc<embedding::EmbeddingModel>>,
     pub text_search: Arc<TextSearch>,
@@ -79,7 +79,7 @@ struct RecommendQuery {
     uid: u64,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct RecommendItem {
     item_id: u64,
     name: String,
@@ -98,7 +98,7 @@ struct RecommendItem {
     reason: String,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct UserInfo {
     id: u64,
     name: String,
@@ -107,11 +107,31 @@ struct UserInfo {
     budget_max: f32,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct RecommendResponse {
     user: UserInfo,
     recommendations: Vec<RecommendItem>,
     filtered_count: usize,
+}
+
+#[derive(Debug, Deserialize)]
+struct BatchRecommendRequest {
+    uids: Vec<u64>,
+}
+
+#[derive(Debug, Serialize)]
+struct BatchRecommendUserResult {
+    uid: u64,
+    status: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response: Option<RecommendResponse>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct BatchRecommendResponse {
+    results: Vec<BatchRecommendUserResult>,
 }
 
 #[derive(Debug, Serialize)]
@@ -191,16 +211,10 @@ async fn recommend_handler(
     State(state): State<Arc<AppState>>,
     Query(params): Query<RecommendQuery>,
 ) -> Result<Json<RecommendResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let (user, output) = build_user_recommendation_output(&state, params.uid)?;
+    let RecommendationServiceOutput { user, output } =
+        recommend_with_timeout(Arc::clone(&state), params.uid).await?;
     let filtered_count = output.filtered_count;
-    state
-        .metrics
-        .record_recommendation_candidates(output.debug.candidate_count);
-    for (stage, latency_micros) in &output.debug.stage_durations_micros {
-        state
-            .metrics
-            .record_recommendation_stage(stage, Duration::from_micros(*latency_micros));
-    }
+    state.recommendation_service.record_output_metrics(&output);
     println!(
         "{}",
         json!({
@@ -211,145 +225,150 @@ async fn recommend_handler(
             "source_distribution": output.debug.source_distribution,
         })
     );
+
+    Ok(Json(recommend_response_from_output(&user, output)))
+}
+
+fn recommend_response_from_output(user: &User, output: RecommendationOutput) -> RecommendResponse {
+    let filtered_count = output.filtered_count;
     let recommendations = output
         .items
         .into_iter()
         .map(recommend_item_from_output)
         .collect();
 
-    Ok(Json(RecommendResponse {
+    RecommendResponse {
         user: user_info_from(user),
         recommendations,
         filtered_count,
+    }
+}
+
+async fn batch_recommend_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<BatchRecommendRequest>,
+) -> Result<Json<BatchRecommendResponse>, (StatusCode, Json<ErrorResponse>)> {
+    if payload.uids.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "uids must not be empty".to_string(),
+            }),
+        ));
+    }
+
+    let max_users = state.recommendation_service.batch_max_users();
+    if payload.uids.len() > max_users {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: format!("Batch recommendation supports at most {} users", max_users),
+            }),
+        ));
+    }
+
+    state.metrics.record_batch_users(payload.uids.len());
+    let mut handles = Vec::with_capacity(payload.uids.len());
+    for (index, uid) in payload.uids.into_iter().enumerate() {
+        let state_for_task = Arc::clone(&state);
+        handles.push((
+            index,
+            uid,
+            tokio::spawn(async move { recommend_with_timeout(state_for_task, uid).await }),
+        ));
+    }
+
+    let mut results = Vec::with_capacity(handles.len());
+    results.resize_with(handles.len(), || None);
+    for (index, uid, handle) in handles {
+        let item = match handle.await {
+            Ok(Ok(RecommendationServiceOutput { user, output })) => {
+                state.recommendation_service.record_output_metrics(&output);
+                BatchRecommendUserResult {
+                    uid,
+                    status: StatusCode::OK.as_u16(),
+                    response: Some(recommend_response_from_output(&user, output)),
+                    error: None,
+                }
+            }
+            Ok(Err((status, Json(error)))) => BatchRecommendUserResult {
+                uid,
+                status: status.as_u16(),
+                response: None,
+                error: Some(error.error),
+            },
+            Err(error) => BatchRecommendUserResult {
+                uid,
+                status: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
+                response: None,
+                error: Some(format!("Recommendation task failed: {}", error)),
+            },
+        };
+        results[index] = Some(item);
+    }
+
+    Ok(Json(BatchRecommendResponse {
+        results: results
+            .into_iter()
+            .map(|item| item.expect("batch result slot should be filled"))
+            .collect(),
     }))
 }
 
-fn build_user_recommendation_output(
-    state: &AppState,
+async fn recommend_with_timeout(
+    state: Arc<AppState>,
     uid: u64,
-) -> Result<(&User, RecommendationOutput), (StatusCode, Json<ErrorResponse>)> {
-    let total_started = Instant::now();
-    let user = state.users.iter().find(|u| u.id == uid).ok_or_else(|| {
-        (
+) -> Result<RecommendationServiceOutput, (StatusCode, Json<ErrorResponse>)> {
+    let timeout = state.recommendation_service.recommend_timeout();
+    if timeout.is_zero() {
+        state.recommendation_service.record_timeout();
+        return Err((
+            StatusCode::GATEWAY_TIMEOUT,
+            Json(ErrorResponse {
+                error: "Recommendation request timed out".to_string(),
+            }),
+        ));
+    }
+    let service = Arc::clone(&state.recommendation_service);
+    let task = tokio::task::spawn_blocking(move || service.recommend_user(uid));
+
+    match tokio::time::timeout(timeout, task).await {
+        Ok(Ok(result)) => result.map_err(recommendation_service_error),
+        Ok(Err(error)) => Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(ErrorResponse {
+                error: format!("Recommendation task failed: {}", error),
+            }),
+        )),
+        Err(_) => {
+            state.recommendation_service.record_timeout();
+            Err((
+                StatusCode::GATEWAY_TIMEOUT,
+                Json(ErrorResponse {
+                    error: "Recommendation request timed out".to_string(),
+                }),
+            ))
+        }
+    }
+}
+
+fn recommendation_service_error(
+    error: RecommendationServiceError,
+) -> (StatusCode, Json<ErrorResponse>) {
+    match error {
+        RecommendationServiceError::UserNotFound(uid) => (
             StatusCode::NOT_FOUND,
             Json(ErrorResponse {
                 error: format!("User {} not found", uid),
             }),
-        )
-    })?;
-
-    let semantic_started = Instant::now();
-    let semantic_hits = state
-        .hnsw_index
-        .search(&user.embedding, 100)
-        .unwrap_or_default();
-    let semantic_duration_micros = semantic_started.elapsed().as_micros() as u64;
-
-    let storage_started = Instant::now();
-    let preferences = state.storage.get_user_preferences(uid).map_err(|e| {
-        (
+        ),
+        RecommendationServiceError::Storage(error) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
-                error: format!("Failed to get preferences: {}", e),
+                error: format!("Recommendation storage failed: {}", error),
             }),
-        )
-    })?;
-    let recent_events = state.storage.get_recent_events(uid).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: format!("Failed to get recent events: {}", e),
-            }),
-        )
-    })?;
-    let filter = state.storage.get_user_filter(uid).map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: format!("Failed to get filter: {}", e),
-            }),
-        )
-    })?;
-    let storage_duration_micros = storage_started.elapsed().as_micros() as u64;
-
-    let recent_recall_mode = RecentRecallMode::from_env();
-    let recent_ann_hits = if matches!(
-        recent_recall_mode,
-        RecentRecallMode::Shadow | RecentRecallMode::Ann
-    ) {
-        build_recent_ann_hits(&state.hnsw_index, &state.items, &recent_events.items, 100)
-    } else {
-        Vec::new()
-    };
-
-    let mut output = build_recommendations_with_indexes(
-        user,
-        &state.items,
-        &state.recommendation_indexes,
-        &semantic_hits,
-        &|item_id| filter.contains(&item_id.to_le_bytes()),
-        RecommendationConfig {
-            ranking_strategy: RankingStrategyKind::from_env(),
-            preferences: Some(preferences),
-            recent_events: recent_events.items,
-            recent_recall_mode,
-            recent_ann_hits,
-            ..Default::default()
-        },
-    );
-    output
-        .debug
-        .stage_durations_micros
-        .insert("semantic_ann".to_string(), semantic_duration_micros);
-    output
-        .debug
-        .stage_durations_micros
-        .insert("storage".to_string(), storage_duration_micros);
-    output.debug.stage_durations_micros.insert(
-        "total".to_string(),
-        total_started.elapsed().as_micros() as u64,
-    );
-
-    Ok((user, output))
-}
-
-fn build_recent_ann_hits(
-    hnsw_index: &HnswIndex,
-    items: &[Item],
-    recent_events: &[BehaviorEvent],
-    k: usize,
-) -> Vec<(u64, Vec<(u64, f32)>)> {
-    let seed_ids = recent_positive_seed_ids(recent_events);
-    if seed_ids.is_empty() {
-        return Vec::new();
+        ),
     }
-
-    let seed_queries: Vec<(u64, Vec<f32>)> = seed_ids
-        .iter()
-        .filter_map(|seed_id| {
-            items
-                .iter()
-                .find(|item| item.id == *seed_id)
-                .map(|item| (*seed_id, item.embedding.clone()))
-        })
-        .collect();
-    if seed_queries.is_empty() {
-        return Vec::new();
-    }
-
-    let seed_embeddings: Vec<Vec<f32>> = seed_queries
-        .iter()
-        .map(|(_, embedding)| embedding.clone())
-        .collect();
-    let Ok(results) = hnsw_index.search_batch(&seed_embeddings, k) else {
-        return Vec::new();
-    };
-
-    seed_queries
-        .into_iter()
-        .map(|(seed_id, _)| seed_id)
-        .zip(results)
-        .collect()
 }
 
 fn recommend_item_from_output(item: PipelineRecommendedItem) -> RecommendItem {
@@ -403,6 +422,9 @@ async fn mark_seen_handler(
                 }),
             )
         })?;
+    state
+        .recommendation_service
+        .invalidate_user_context(payload.uid);
 
     Ok(Json(MarkSeenResponse {
         marked: payload.item_ids.len(),
@@ -480,6 +502,7 @@ fn record_behavior_event(
             )
         })?;
     }
+    state.recommendation_service.invalidate_user_context(uid);
 
     let recent_events = state.storage.get_recent_events(uid).map_err(|e| {
         (
@@ -533,7 +556,10 @@ async fn debug_recommendation_handler(
     State(state): State<Arc<AppState>>,
     Query(params): Query<RecommendQuery>,
 ) -> Result<Json<DebugRecommendationResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let (user, output) = build_user_recommendation_output(&state, params.uid)?;
+    let RecommendationServiceOutput { user, output } = state
+        .recommendation_service
+        .recommend_user(params.uid)
+        .map_err(recommendation_service_error)?;
     let recent_events = state.storage.get_recent_events(params.uid).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -571,7 +597,7 @@ async fn debug_recommendation_handler(
         .collect();
 
     Ok(Json(DebugRecommendationResponse {
-        user: user_info_from(user),
+        user: user_info_from(&user),
         recommendations,
         filtered_count: output.filtered_count,
         candidate_count: debug.candidate_count,
@@ -1030,13 +1056,24 @@ pub fn init_data_with_storage(
         .collect();
     let recommendation_indexes = RecommendationIndexes::from_items(&items);
     let hnsw_index = init_hnsw_with_hydration(&items, config)?;
+    let users = Arc::new(users);
+    let items = Arc::new(items);
+    let recommendation_service = Arc::new(RecommendationService::new(
+        Arc::clone(&storage),
+        Arc::clone(&users),
+        Arc::clone(&items),
+        recommendation_indexes.clone(),
+        Arc::clone(&hnsw_index),
+        Arc::clone(&metrics),
+        RecommendationServiceConfig::from_app_config(config),
+    ));
 
     Ok(Arc::new(AppState {
         storage,
         users,
         items,
         item_map,
-        recommendation_indexes,
+        recommendation_service,
         hnsw_index,
         embedding_model,
         text_search,
@@ -1230,6 +1267,7 @@ pub fn build_app(state: Arc<AppState>, config: &AppConfig) -> Router {
         .route("/metrics", get(metrics_handler))
         .route("/users", get(users_handler))
         .route("/recommend", get(recommend_handler))
+        .route("/recommend/batch", post(batch_recommend_handler))
         .route("/debug/recommendation", get(debug_recommendation_handler))
         .route("/search", get(search_handler))
         .route("/events", post(events_handler))
@@ -1277,7 +1315,7 @@ mod tests {
     use crate::model::DIM;
     use fastbloom_rs::Membership;
     use std::fs;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     #[test]
     fn detects_cjk_text_as_unsupported_search_input() {
@@ -1323,14 +1361,27 @@ mod tests {
     }
 
     fn test_state(path: &str) -> AppState {
+        test_state_with_timeout(path, Duration::from_millis(150))
+    }
+
+    fn test_state_with_timeout(path: &str, recommend_timeout: Duration) -> AppState {
+        test_state_with_limits(path, recommend_timeout, 32, 10_000)
+    }
+
+    fn test_state_with_limits(
+        path: &str,
+        recommend_timeout: Duration,
+        batch_max_users: usize,
+        recall_parallel_min_items: usize,
+    ) -> AppState {
         let storage = Arc::new(Storage::new(path).unwrap());
-        let users = vec![User {
+        let users = Arc::new(vec![User {
             id: 1,
             name: "Test user".to_string(),
             embedding: vec![0.0; DIM],
             profile: UserProfile::default(),
-        }];
-        let items = vec![test_item(10, "Books")];
+        }]);
+        let items = Arc::new(vec![test_item(10, "Books")]);
         storage.save_user(&users[0]).unwrap();
         storage.save_item(&items[0]).unwrap();
         let item_map = items
@@ -1350,19 +1401,134 @@ mod tests {
             .unwrap(),
         );
         let text_search = Arc::new(TextSearch::new(&format!("{}-tantivy", path)).unwrap());
+        let metrics = Arc::new(Metrics::default());
+        let recommendation_service = Arc::new(RecommendationService::new(
+            Arc::clone(&storage),
+            Arc::clone(&users),
+            Arc::clone(&items),
+            recommendation_indexes.clone(),
+            Arc::clone(&hnsw_index),
+            Arc::clone(&metrics),
+            RecommendationServiceConfig {
+                recommend_timeout,
+                user_context_cache: crate::recommendation::service::UserContextCacheConfig {
+                    ttl: Duration::from_millis(1000),
+                    max_users: 1024,
+                },
+                batch_max_users,
+                recall_parallel_min_items,
+            },
+        ));
 
         AppState {
             storage,
             users,
             items,
             item_map,
-            recommendation_indexes,
+            recommendation_service,
             hnsw_index,
             embedding_model: None,
             text_search,
-            metrics: Arc::new(Metrics::default()),
+            metrics,
             readiness: Arc::new(ReadinessState::default()),
         }
+    }
+
+    #[tokio::test]
+    async fn recommend_with_timeout_returns_recommendations() {
+        let path = temp_path("recommend-ok");
+        let state = Arc::new(test_state(&path));
+
+        let result = recommend_with_timeout(Arc::clone(&state), 1).await.unwrap();
+
+        assert_eq!(result.user.id, 1);
+        assert!(!result.output.items.is_empty());
+        drop(state);
+        let _ = fs::remove_dir_all(&path);
+        let _ = fs::remove_dir_all(format!("{}-tantivy", path));
+    }
+
+    #[tokio::test]
+    async fn recommend_with_timeout_returns_gateway_timeout() {
+        let path = temp_path("recommend-timeout");
+        let state = Arc::new(test_state_with_timeout(&path, Duration::from_millis(0)));
+
+        let err = recommend_with_timeout(Arc::clone(&state), 1)
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.0, StatusCode::GATEWAY_TIMEOUT);
+        assert_eq!(err.1 .0.error, "Recommendation request timed out");
+        assert!(state
+            .metrics
+            .render_prometheus()
+            .contains("mini_recsys_recommendation_timeouts_total 1"));
+        drop(state);
+        let _ = fs::remove_dir_all(&path);
+        let _ = fs::remove_dir_all(format!("{}-tantivy", path));
+    }
+
+    #[tokio::test]
+    async fn batch_recommend_rejects_empty_and_oversized_requests() {
+        let path = temp_path("batch-invalid");
+        let state = Arc::new(test_state_with_limits(
+            &path,
+            Duration::from_millis(150),
+            1,
+            10_000,
+        ));
+
+        let empty = batch_recommend_handler(
+            State(Arc::clone(&state)),
+            Json(BatchRecommendRequest { uids: Vec::new() }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(empty.0, StatusCode::BAD_REQUEST);
+
+        let oversized = batch_recommend_handler(
+            State(Arc::clone(&state)),
+            Json(BatchRecommendRequest { uids: vec![1, 2] }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(oversized.0, StatusCode::BAD_REQUEST);
+        drop(state);
+        let _ = fs::remove_dir_all(&path);
+        let _ = fs::remove_dir_all(format!("{}-tantivy", path));
+    }
+
+    #[tokio::test]
+    async fn batch_recommend_returns_independent_success_and_failure_items() {
+        let path = temp_path("batch-partial");
+        let state = Arc::new(test_state(&path));
+
+        let Json(response) = batch_recommend_handler(
+            State(Arc::clone(&state)),
+            Json(BatchRecommendRequest { uids: vec![1, 99] }),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.results.len(), 2);
+        assert_eq!(response.results[0].uid, 1);
+        assert_eq!(response.results[0].status, StatusCode::OK.as_u16());
+        assert!(response.results[0].response.is_some());
+        assert!(response.results[0].error.is_none());
+        assert_eq!(response.results[1].uid, 99);
+        assert_eq!(response.results[1].status, StatusCode::NOT_FOUND.as_u16());
+        assert!(response.results[1].response.is_none());
+        assert_eq!(
+            response.results[1].error.as_deref(),
+            Some("User 99 not found")
+        );
+        assert!(state
+            .metrics
+            .render_prometheus()
+            .contains("mini_recsys_batch_users_total 2"));
+        drop(state);
+        let _ = fs::remove_dir_all(&path);
+        let _ = fs::remove_dir_all(format!("{}-tantivy", path));
     }
 
     #[test]
