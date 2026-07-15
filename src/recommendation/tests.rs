@@ -526,6 +526,59 @@ fn recent_shadow_mode_records_quality_but_keeps_exact_results() {
 }
 
 #[test]
+fn parallel_recall_matches_serial_recall_output() {
+    let user = User {
+        id: 1,
+        name: "Parallel recall user".to_string(),
+        embedding: normalized_category("Books"),
+        profile: UserProfile::build(&[("Books", 0.9), ("Electronics", 0.4)], 10.0, 300.0),
+    };
+    let items = vec![
+        item(1, "Books", 0.20, 20.0),
+        item(2, "Books", 0.80, 22.0),
+        item(3, "Electronics", 0.70, 120.0),
+        item(4, "Home", 0.95, 40.0),
+        item(5, "Books", 0.60, 18.0),
+    ];
+    let semantic_hits = vec![(2, 0.92), (3, 0.40)];
+    let recent_events = vec![BehaviorEvent::new(1, 1, EventType::Click, "Books")];
+
+    let serial = build_recommendations(
+        &user,
+        &items,
+        &semantic_hits,
+        &|_| false,
+        RecommendationConfig {
+            limit: 4,
+            exploration_slots: 0,
+            recent_events: recent_events.clone(),
+            recall_parallel_min_items: usize::MAX,
+            ..Default::default()
+        },
+    );
+    let parallel = build_recommendations(
+        &user,
+        &items,
+        &semantic_hits,
+        &|_| false,
+        RecommendationConfig {
+            limit: 4,
+            exploration_slots: 0,
+            recent_events,
+            recall_parallel_min_items: 0,
+            ..Default::default()
+        },
+    );
+
+    assert_eq!(top_item_ids(&serial), top_item_ids(&parallel));
+    assert_eq!(serial.debug.candidate_count, parallel.debug.candidate_count);
+    assert_eq!(
+        serial.debug.source_distribution,
+        parallel.debug.source_distribution
+    );
+}
+
+#[test]
 #[ignore]
 fn recent_ann_quality_against_exact() {
     run_recent_ann_quality_benchmark();

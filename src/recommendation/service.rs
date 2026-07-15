@@ -178,10 +178,6 @@ impl RecommendationService {
         self.config.batch_max_users
     }
 
-    pub fn recall_parallel_min_items(&self) -> usize {
-        self.config.recall_parallel_min_items
-    }
-
     pub fn invalidate_user_context(&self, uid: u64) {
         self.cache.invalidate(uid);
     }
@@ -248,6 +244,7 @@ impl RecommendationService {
                 recent_events: context.recent_events,
                 recent_recall_mode,
                 recent_ann_hits,
+                recall_parallel_min_items: self.config.recall_parallel_min_items,
                 ..Default::default()
             },
         );

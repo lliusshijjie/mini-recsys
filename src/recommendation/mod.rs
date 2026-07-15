@@ -24,6 +24,6 @@ pub use service::{
     RecommendationService, RecommendationServiceConfig, RecommendationServiceError,
     RecommendationServiceOutput,
 };
-pub use types::RecommendedItem;
 #[cfg(test)]
-pub use types::{RecentRecallMode, RecommendationConfig, RecommendationOutput};
+pub use types::{RecentRecallMode, RecommendationConfig};
+pub use types::{RecommendationOutput, RecommendedItem};

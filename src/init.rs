@@ -11,8 +11,8 @@ use crate::model::{
 };
 use crate::observability::Metrics;
 use crate::recommendation::{
-    RecommendationIndexes, RecommendationService, RecommendationServiceConfig,
-    RecommendationServiceError, RecommendationServiceOutput,
+    RecommendationIndexes, RecommendationOutput, RecommendationService,
+    RecommendationServiceConfig, RecommendationServiceError, RecommendationServiceOutput,
     RecommendedItem as PipelineRecommendedItem,
 };
 use crate::storage::Storage;
@@ -79,7 +79,7 @@ struct RecommendQuery {
     uid: u64,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct RecommendItem {
     item_id: u64,
     name: String,
@@ -98,7 +98,7 @@ struct RecommendItem {
     reason: String,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct UserInfo {
     id: u64,
     name: String,
@@ -107,11 +107,31 @@ struct UserInfo {
     budget_max: f32,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct RecommendResponse {
     user: UserInfo,
     recommendations: Vec<RecommendItem>,
     filtered_count: usize,
+}
+
+#[derive(Debug, Deserialize)]
+struct BatchRecommendRequest {
+    uids: Vec<u64>,
+}
+
+#[derive(Debug, Serialize)]
+struct BatchRecommendUserResult {
+    uid: u64,
+    status: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response: Option<RecommendResponse>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct BatchRecommendResponse {
+    results: Vec<BatchRecommendUserResult>,
 }
 
 #[derive(Debug, Serialize)]
@@ -205,16 +225,93 @@ async fn recommend_handler(
             "source_distribution": output.debug.source_distribution,
         })
     );
+
+    Ok(Json(recommend_response_from_output(&user, output)))
+}
+
+fn recommend_response_from_output(user: &User, output: RecommendationOutput) -> RecommendResponse {
+    let filtered_count = output.filtered_count;
     let recommendations = output
         .items
         .into_iter()
         .map(recommend_item_from_output)
         .collect();
 
-    Ok(Json(RecommendResponse {
-        user: user_info_from(&user),
+    RecommendResponse {
+        user: user_info_from(user),
         recommendations,
         filtered_count,
+    }
+}
+
+async fn batch_recommend_handler(
+    State(state): State<Arc<AppState>>,
+    Json(payload): Json<BatchRecommendRequest>,
+) -> Result<Json<BatchRecommendResponse>, (StatusCode, Json<ErrorResponse>)> {
+    if payload.uids.is_empty() {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: "uids must not be empty".to_string(),
+            }),
+        ));
+    }
+
+    let max_users = state.recommendation_service.batch_max_users();
+    if payload.uids.len() > max_users {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: format!("Batch recommendation supports at most {} users", max_users),
+            }),
+        ));
+    }
+
+    state.metrics.record_batch_users(payload.uids.len());
+    let mut handles = Vec::with_capacity(payload.uids.len());
+    for (index, uid) in payload.uids.into_iter().enumerate() {
+        let state_for_task = Arc::clone(&state);
+        handles.push((
+            index,
+            uid,
+            tokio::spawn(async move { recommend_with_timeout(state_for_task, uid).await }),
+        ));
+    }
+
+    let mut results = Vec::with_capacity(handles.len());
+    results.resize_with(handles.len(), || None);
+    for (index, uid, handle) in handles {
+        let item = match handle.await {
+            Ok(Ok(RecommendationServiceOutput { user, output })) => {
+                state.recommendation_service.record_output_metrics(&output);
+                BatchRecommendUserResult {
+                    uid,
+                    status: StatusCode::OK.as_u16(),
+                    response: Some(recommend_response_from_output(&user, output)),
+                    error: None,
+                }
+            }
+            Ok(Err((status, Json(error)))) => BatchRecommendUserResult {
+                uid,
+                status: status.as_u16(),
+                response: None,
+                error: Some(error.error),
+            },
+            Err(error) => BatchRecommendUserResult {
+                uid,
+                status: StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
+                response: None,
+                error: Some(format!("Recommendation task failed: {}", error)),
+            },
+        };
+        results[index] = Some(item);
+    }
+
+    Ok(Json(BatchRecommendResponse {
+        results: results
+            .into_iter()
+            .map(|item| item.expect("batch result slot should be filled"))
+            .collect(),
     }))
 }
 
@@ -1170,6 +1267,7 @@ pub fn build_app(state: Arc<AppState>, config: &AppConfig) -> Router {
         .route("/metrics", get(metrics_handler))
         .route("/users", get(users_handler))
         .route("/recommend", get(recommend_handler))
+        .route("/recommend/batch", post(batch_recommend_handler))
         .route("/debug/recommendation", get(debug_recommendation_handler))
         .route("/search", get(search_handler))
         .route("/events", post(events_handler))
@@ -1267,6 +1365,15 @@ mod tests {
     }
 
     fn test_state_with_timeout(path: &str, recommend_timeout: Duration) -> AppState {
+        test_state_with_limits(path, recommend_timeout, 32, 10_000)
+    }
+
+    fn test_state_with_limits(
+        path: &str,
+        recommend_timeout: Duration,
+        batch_max_users: usize,
+        recall_parallel_min_items: usize,
+    ) -> AppState {
         let storage = Arc::new(Storage::new(path).unwrap());
         let users = Arc::new(vec![User {
             id: 1,
@@ -1308,8 +1415,8 @@ mod tests {
                     ttl: Duration::from_millis(1000),
                     max_users: 1024,
                 },
-                batch_max_users: 32,
-                recall_parallel_min_items: 10_000,
+                batch_max_users,
+                recall_parallel_min_items,
             },
         ));
 
@@ -1356,6 +1463,69 @@ mod tests {
             .metrics
             .render_prometheus()
             .contains("mini_recsys_recommendation_timeouts_total 1"));
+        drop(state);
+        let _ = fs::remove_dir_all(&path);
+        let _ = fs::remove_dir_all(format!("{}-tantivy", path));
+    }
+
+    #[tokio::test]
+    async fn batch_recommend_rejects_empty_and_oversized_requests() {
+        let path = temp_path("batch-invalid");
+        let state = Arc::new(test_state_with_limits(
+            &path,
+            Duration::from_millis(150),
+            1,
+            10_000,
+        ));
+
+        let empty = batch_recommend_handler(
+            State(Arc::clone(&state)),
+            Json(BatchRecommendRequest { uids: Vec::new() }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(empty.0, StatusCode::BAD_REQUEST);
+
+        let oversized = batch_recommend_handler(
+            State(Arc::clone(&state)),
+            Json(BatchRecommendRequest { uids: vec![1, 2] }),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(oversized.0, StatusCode::BAD_REQUEST);
+        drop(state);
+        let _ = fs::remove_dir_all(&path);
+        let _ = fs::remove_dir_all(format!("{}-tantivy", path));
+    }
+
+    #[tokio::test]
+    async fn batch_recommend_returns_independent_success_and_failure_items() {
+        let path = temp_path("batch-partial");
+        let state = Arc::new(test_state(&path));
+
+        let Json(response) = batch_recommend_handler(
+            State(Arc::clone(&state)),
+            Json(BatchRecommendRequest { uids: vec![1, 99] }),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(response.results.len(), 2);
+        assert_eq!(response.results[0].uid, 1);
+        assert_eq!(response.results[0].status, StatusCode::OK.as_u16());
+        assert!(response.results[0].response.is_some());
+        assert!(response.results[0].error.is_none());
+        assert_eq!(response.results[1].uid, 99);
+        assert_eq!(response.results[1].status, StatusCode::NOT_FOUND.as_u16());
+        assert!(response.results[1].response.is_none());
+        assert_eq!(
+            response.results[1].error.as_deref(),
+            Some("User 99 not found")
+        );
+        assert!(state
+            .metrics
+            .render_prometheus()
+            .contains("mini_recsys_batch_users_total 2"));
         drop(state);
         let _ = fs::remove_dir_all(&path);
         let _ = fs::remove_dir_all(format!("{}-tantivy", path));

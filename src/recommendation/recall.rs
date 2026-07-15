@@ -73,25 +73,40 @@ pub(super) fn recall_candidates(
     };
     let mut candidates = HashMap::new();
     let mut stage_durations_micros = HashMap::new();
-    let mut quality_metrics = HashMap::new();
+    let recall_sources = if items.len() >= config.recall_parallel_min_items {
+        recall_sources_parallel(&context, config.recent_recall_mode)
+    } else {
+        recall_sources_serial(&context, config.recent_recall_mode)
+    };
+    let quality_metrics = recall_sources.recent_quality_metrics;
 
-    let (hits, elapsed) = timed(|| recall_semantic_ann(&context));
-    stage_durations_micros.insert("semantic_ann".to_string(), elapsed.as_micros() as u64);
-    merge_hits(&mut candidates, hits);
+    stage_durations_micros.insert(
+        "semantic_ann".to_string(),
+        recall_sources.semantic_elapsed.as_micros() as u64,
+    );
+    merge_hits(&mut candidates, recall_sources.semantic_hits);
 
-    let (hits, elapsed) = timed(|| recall_category_profile(&context));
-    stage_durations_micros.insert("category_recall".to_string(), elapsed.as_micros() as u64);
-    merge_hits(&mut candidates, hits);
+    stage_durations_micros.insert(
+        "category_recall".to_string(),
+        recall_sources.category_elapsed.as_micros() as u64,
+    );
+    merge_hits(&mut candidates, recall_sources.category_hits);
 
-    let (hits, elapsed) = timed(|| {
-        recall_recent_item_similarity(&context, config.recent_recall_mode, &mut quality_metrics)
-    });
-    stage_durations_micros.insert("recent_ann".to_string(), elapsed.as_micros() as u64);
-    merge_hits(&mut candidates, hits);
+    stage_durations_micros.insert(
+        "recent_ann".to_string(),
+        recall_sources.recent_elapsed.as_micros() as u64,
+    );
+    merge_hits(&mut candidates, recall_sources.recent_hits);
 
-    let (hits, elapsed) = timed(|| recall_popular_fallback(&context));
-    stage_durations_micros.insert("popular_fallback".to_string(), elapsed.as_micros() as u64);
-    merge_popular_fallback(&mut candidates, hits, context.pool_size);
+    stage_durations_micros.insert(
+        "popular_fallback".to_string(),
+        recall_sources.popular_elapsed.as_micros() as u64,
+    );
+    merge_popular_fallback(
+        &mut candidates,
+        recall_sources.popular_hits,
+        context.pool_size,
+    );
 
     RecallOutput {
         candidates,
@@ -104,6 +119,71 @@ fn timed<T>(operation: impl FnOnce() -> T) -> (T, Duration) {
     let started = Instant::now();
     let value = operation();
     (value, started.elapsed())
+}
+
+struct RecallSourceOutputs {
+    semantic_hits: Vec<RecallHit>,
+    semantic_elapsed: Duration,
+    category_hits: Vec<RecallHit>,
+    category_elapsed: Duration,
+    recent_hits: Vec<RecallHit>,
+    recent_quality_metrics: HashMap<String, f32>,
+    recent_elapsed: Duration,
+    popular_hits: Vec<RecallHit>,
+    popular_elapsed: Duration,
+}
+
+fn recall_sources_serial(
+    context: &RecallContext<'_>,
+    mode: RecentRecallMode,
+) -> RecallSourceOutputs {
+    let (semantic_hits, semantic_elapsed) = timed(|| recall_semantic_ann(context));
+    let (category_hits, category_elapsed) = timed(|| recall_category_profile(context));
+    let ((recent_hits, recent_quality_metrics), recent_elapsed) =
+        timed(|| recall_recent_item_similarity(context, mode));
+    let (popular_hits, popular_elapsed) = timed(|| recall_popular_fallback(context));
+
+    RecallSourceOutputs {
+        semantic_hits,
+        semantic_elapsed,
+        category_hits,
+        category_elapsed,
+        recent_hits,
+        recent_quality_metrics,
+        recent_elapsed,
+        popular_hits,
+        popular_elapsed,
+    }
+}
+
+fn recall_sources_parallel(
+    context: &RecallContext<'_>,
+    mode: RecentRecallMode,
+) -> RecallSourceOutputs {
+    std::thread::scope(|scope| {
+        let semantic = scope.spawn(|| timed(|| recall_semantic_ann(context)));
+        let category = scope.spawn(|| timed(|| recall_category_profile(context)));
+        let recent = scope.spawn(|| timed(|| recall_recent_item_similarity(context, mode)));
+        let popular = scope.spawn(|| timed(|| recall_popular_fallback(context)));
+
+        let (semantic_hits, semantic_elapsed) = semantic.join().expect("semantic recall panicked");
+        let (category_hits, category_elapsed) = category.join().expect("category recall panicked");
+        let ((recent_hits, recent_quality_metrics), recent_elapsed) =
+            recent.join().expect("recent recall panicked");
+        let (popular_hits, popular_elapsed) = popular.join().expect("popular recall panicked");
+
+        RecallSourceOutputs {
+            semantic_hits,
+            semantic_elapsed,
+            category_hits,
+            category_elapsed,
+            recent_hits,
+            recent_quality_metrics,
+            recent_elapsed,
+            popular_hits,
+            popular_elapsed,
+        }
+    })
 }
 
 fn recall_semantic_ann(context: &RecallContext<'_>) -> Vec<RecallHit> {
@@ -173,20 +253,20 @@ fn recall_category_profile(context: &RecallContext<'_>) -> Vec<RecallHit> {
 fn recall_recent_item_similarity(
     context: &RecallContext<'_>,
     mode: RecentRecallMode,
-    quality_metrics: &mut HashMap<String, f32>,
-) -> Vec<RecallHit> {
+) -> (Vec<RecallHit>, HashMap<String, f32>) {
     let exact_hits = || recall_recent_item_similarity_exact(context);
     match mode {
-        RecentRecallMode::Exact => exact_hits(),
-        RecentRecallMode::Ann => recall_recent_item_similarity_ann(context),
+        RecentRecallMode::Exact => (exact_hits(), HashMap::new()),
+        RecentRecallMode::Ann => (recall_recent_item_similarity_ann(context), HashMap::new()),
         RecentRecallMode::Shadow => {
             let exact = exact_hits();
             let ann = recall_recent_item_similarity_ann(context);
+            let mut quality_metrics = HashMap::new();
             quality_metrics.insert(
                 "recent_ann_overlap".to_string(),
                 overlap_ratio(&exact, &ann),
             );
-            exact
+            (exact, quality_metrics)
         }
     }
 }
