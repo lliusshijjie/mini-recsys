@@ -3,7 +3,7 @@
 use crate::behavior::{BehaviorEvent, EventType, UserPreferences};
 use crate::config::AppConfig;
 use crate::embedding;
-use crate::ffi::{add_item_to_hnsw, get_hnsw_count, hnsw_search, load_hnsw_index, save_hnsw_index};
+use crate::ffi::{HnswConfig, HnswIndex};
 use crate::hybrid;
 use crate::model::{
     build_user, generate_category_embedding, generate_random_embedding, Item, ItemJson, User,
@@ -11,7 +11,8 @@ use crate::model::{
 };
 use crate::observability::Metrics;
 use crate::recommendation::{
-    build_recommendations, RankingStrategyKind, RecommendationConfig, RecommendationOutput,
+    build_recommendations_with_indexes, recent_positive_seed_ids, RankingStrategyKind,
+    RecentRecallMode, RecommendationConfig, RecommendationIndexes, RecommendationOutput,
     RecommendedItem as PipelineRecommendedItem,
 };
 use crate::storage::Storage;
@@ -34,7 +35,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tower_http::cors::{Any, CorsLayer};
 
 // ============================================================================
@@ -46,6 +47,8 @@ pub struct AppState {
     pub users: Vec<User>,
     pub items: Vec<Item>,
     pub item_map: HashMap<u64, usize>,
+    pub recommendation_indexes: RecommendationIndexes,
+    pub hnsw_index: Arc<HnswIndex>,
     pub embedding_model: Option<Arc<embedding::EmbeddingModel>>,
     pub text_search: Arc<TextSearch>,
     pub metrics: Arc<Metrics>,
@@ -175,6 +178,7 @@ struct DebugRecommendationResponse {
     candidates: Vec<DebugCandidateResponse>,
     category_distribution: HashMap<String, usize>,
     source_distribution: HashMap<String, usize>,
+    quality_metrics: HashMap<String, f32>,
     recent_events: Vec<BehaviorEvent>,
     preferences: UserPreferences,
 }
@@ -192,6 +196,11 @@ async fn recommend_handler(
     state
         .metrics
         .record_recommendation_candidates(output.debug.candidate_count);
+    for (stage, latency_micros) in &output.debug.stage_durations_micros {
+        state
+            .metrics
+            .record_recommendation_stage(stage, Duration::from_micros(*latency_micros));
+    }
     println!(
         "{}",
         json!({
@@ -219,6 +228,7 @@ fn build_user_recommendation_output(
     state: &AppState,
     uid: u64,
 ) -> Result<(&User, RecommendationOutput), (StatusCode, Json<ErrorResponse>)> {
+    let total_started = Instant::now();
     let user = state.users.iter().find(|u| u.id == uid).ok_or_else(|| {
         (
             StatusCode::NOT_FOUND,
@@ -228,7 +238,14 @@ fn build_user_recommendation_output(
         )
     })?;
 
-    let semantic_hits = hnsw_search(&user.embedding, 100);
+    let semantic_started = Instant::now();
+    let semantic_hits = state
+        .hnsw_index
+        .search(&user.embedding, 100)
+        .unwrap_or_default();
+    let semantic_duration_micros = semantic_started.elapsed().as_micros() as u64;
+
+    let storage_started = Instant::now();
     let preferences = state.storage.get_user_preferences(uid).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -253,21 +270,86 @@ fn build_user_recommendation_output(
             }),
         )
     })?;
+    let storage_duration_micros = storage_started.elapsed().as_micros() as u64;
 
-    let output = build_recommendations(
+    let recent_recall_mode = RecentRecallMode::from_env();
+    let recent_ann_hits = if matches!(
+        recent_recall_mode,
+        RecentRecallMode::Shadow | RecentRecallMode::Ann
+    ) {
+        build_recent_ann_hits(&state.hnsw_index, &state.items, &recent_events.items, 100)
+    } else {
+        Vec::new()
+    };
+
+    let mut output = build_recommendations_with_indexes(
         user,
         &state.items,
+        &state.recommendation_indexes,
         &semantic_hits,
         &|item_id| filter.contains(&item_id.to_le_bytes()),
         RecommendationConfig {
             ranking_strategy: RankingStrategyKind::from_env(),
             preferences: Some(preferences),
             recent_events: recent_events.items,
+            recent_recall_mode,
+            recent_ann_hits,
             ..Default::default()
         },
     );
+    output
+        .debug
+        .stage_durations_micros
+        .insert("semantic_ann".to_string(), semantic_duration_micros);
+    output
+        .debug
+        .stage_durations_micros
+        .insert("storage".to_string(), storage_duration_micros);
+    output.debug.stage_durations_micros.insert(
+        "total".to_string(),
+        total_started.elapsed().as_micros() as u64,
+    );
 
     Ok((user, output))
+}
+
+fn build_recent_ann_hits(
+    hnsw_index: &HnswIndex,
+    items: &[Item],
+    recent_events: &[BehaviorEvent],
+    k: usize,
+) -> Vec<(u64, Vec<(u64, f32)>)> {
+    let seed_ids = recent_positive_seed_ids(recent_events);
+    if seed_ids.is_empty() {
+        return Vec::new();
+    }
+
+    let seed_queries: Vec<(u64, Vec<f32>)> = seed_ids
+        .iter()
+        .filter_map(|seed_id| {
+            items
+                .iter()
+                .find(|item| item.id == *seed_id)
+                .map(|item| (*seed_id, item.embedding.clone()))
+        })
+        .collect();
+    if seed_queries.is_empty() {
+        return Vec::new();
+    }
+
+    let seed_embeddings: Vec<Vec<f32>> = seed_queries
+        .iter()
+        .map(|(_, embedding)| embedding.clone())
+        .collect();
+    let Ok(results) = hnsw_index.search_batch(&seed_embeddings, k) else {
+        return Vec::new();
+    };
+
+    seed_queries
+        .into_iter()
+        .map(|(seed_id, _)| seed_id)
+        .zip(results)
+        .collect()
 }
 
 fn recommend_item_from_output(item: PipelineRecommendedItem) -> RecommendItem {
@@ -496,6 +578,7 @@ async fn debug_recommendation_handler(
         candidates,
         category_distribution: debug.category_distribution,
         source_distribution: debug.source_distribution,
+        quality_metrics: debug.quality_metrics,
         recent_events: recent_events.items,
         preferences,
     }))
@@ -549,7 +632,7 @@ async fn search_handler(
         )
     })?;
 
-    let vec_candidates = hnsw_search(&query_vec, 50); // Top 50 vector results
+    let vec_candidates = state.hnsw_index.search(&query_vec, 50).unwrap_or_default();
     let vec_results: Vec<(u32, f32)> = vec_candidates
         .into_iter()
         .map(|(id, score)| (id as u32, score))
@@ -831,12 +914,10 @@ fn should_reseed_users(storage: &Storage) -> Result<bool> {
     }
 
     match storage.get_all_users() {
-        Ok(users) => Ok(
-            users.len() < USER_SEED_COUNT
-                || users
-                    .iter()
-                    .all(|user| user.profile.category_weights.is_empty()),
-        ),
+        Ok(users) => Ok(users.len() < USER_SEED_COUNT
+            || users
+                .iter()
+                .all(|user| user.profile.category_weights.is_empty())),
         Err(_) => Ok(true),
     }
 }
@@ -885,6 +966,7 @@ fn load_items_from_json_fallback() -> Result<Vec<Item>> {
 }
 
 pub fn init_data_with_storage(
+    config: &AppConfig,
     storage: Arc<Storage>,
     embedding_model: Option<Arc<embedding::EmbeddingModel>>,
     text_search: Arc<TextSearch>,
@@ -946,12 +1028,16 @@ pub fn init_data_with_storage(
         .enumerate()
         .map(|(i, item)| (item.id, i))
         .collect();
+    let recommendation_indexes = RecommendationIndexes::from_items(&items);
+    let hnsw_index = init_hnsw_with_hydration(&items, config)?;
 
     Ok(Arc::new(AppState {
         storage,
         users,
         items,
         item_map,
+        recommendation_indexes,
+        hnsw_index,
         embedding_model,
         text_search,
         metrics,
@@ -963,15 +1049,22 @@ pub fn init_data_with_storage(
 // Index initialization (hydration)
 // ============================================================================
 
-pub fn init_hnsw_with_hydration(items: &[Item], config: &AppConfig) -> Result<()> {
+pub fn init_hnsw_with_hydration(items: &[Item], config: &AppConfig) -> Result<Arc<HnswIndex>> {
     let max_elements = items.len() + 1000;
     let index_path = config.index_path_str();
 
     println!("🔧 Loading HNSW index from {}...", index_path);
-    let loaded =
-        load_hnsw_index(&index_path, DIM, max_elements, 100).map_err(|e| anyhow::anyhow!(e))?;
+    let hnsw_config = HnswConfig {
+        dim: DIM,
+        max_elements,
+        m: 16,
+        ef_construction: 200,
+        ef_search: 100,
+    };
+    let (mut index, loaded) = HnswIndex::load_or_create(&index_path, DIM, max_elements, 100)
+        .map_err(|e| anyhow::anyhow!(e))?;
 
-    let index_count = get_hnsw_count();
+    let index_count = index.count();
     let db_count = items.len();
 
     if loaded && index_count == db_count {
@@ -979,7 +1072,7 @@ pub fn init_hnsw_with_hydration(items: &[Item], config: &AppConfig) -> Result<()
             "✅ HNSW index loaded: {} items (consistent with DB)",
             index_count
         );
-        return Ok(());
+        return Ok(Arc::new(index));
     }
 
     if !loaded {
@@ -989,29 +1082,30 @@ pub fn init_hnsw_with_hydration(items: &[Item], config: &AppConfig) -> Result<()
             "⚠️  Index count ({}) != DB count ({}), rebuilding...",
             index_count, db_count
         );
+        index = HnswIndex::new(&hnsw_config).map_err(|e| anyhow::anyhow!(e))?;
     }
 
     println!("🔄 Hydrating index from database...");
     let mut success = 0;
     for item in items {
-        if add_item_to_hnsw(item.id, &item.embedding).is_ok() {
+        if index.add_item(item.id, &item.embedding).is_ok() {
             success += 1;
         }
     }
     println!("✅ HNSW index rebuilt with {} items", success);
 
-    Ok(())
+    Ok(Arc::new(index))
 }
 
 // ============================================================================
 // Graceful shutdown
 // ============================================================================
 
-async fn graceful_shutdown(storage: Arc<Storage>, config: AppConfig) {
+async fn graceful_shutdown(storage: Arc<Storage>, hnsw_index: Arc<HnswIndex>, config: AppConfig) {
     println!("\n🛑 Shutting down...");
     let index_path = config.index_path_str();
 
-    match save_hnsw_index(&index_path) {
+    match hnsw_index.save(&index_path) {
         Ok(()) => println!("💾 HNSW index saved to {}", index_path),
         Err(e) => eprintln!("❌ Failed to save index: {}", e),
     }
@@ -1148,7 +1242,12 @@ pub fn build_app(state: Arc<AppState>, config: &AppConfig) -> Router {
         .with_state(state)
 }
 
-pub async fn serve_app(app: Router, storage: Arc<Storage>, config: AppConfig) -> Result<()> {
+pub async fn serve_app(
+    app: Router,
+    storage: Arc<Storage>,
+    hnsw_index: Arc<HnswIndex>,
+    config: AppConfig,
+) -> Result<()> {
     let addr = format!("0.0.0.0:{}", config.port);
     println!("🌐 Server running at http://{}", addr);
     println!("   GET  /search?q=<query> - semantic search");
@@ -1158,13 +1257,14 @@ pub async fn serve_app(app: Router, storage: Arc<Storage>, config: AppConfig) ->
     let listener = tokio::net::TcpListener::bind(&addr).await?;
 
     let storage_for_shutdown = Arc::clone(&storage);
+    let hnsw_for_shutdown = Arc::clone(&hnsw_index);
     let config_for_shutdown = config.clone();
     tokio::select! {
         result = axum::serve(listener, app) => {
             result?;
         }
         _ = tokio::signal::ctrl_c() => {
-            graceful_shutdown(storage_for_shutdown, config_for_shutdown).await;
+            graceful_shutdown(storage_for_shutdown, hnsw_for_shutdown, config_for_shutdown).await;
         }
     }
 
@@ -1238,6 +1338,17 @@ mod tests {
             .enumerate()
             .map(|(index, item)| (item.id, index))
             .collect();
+        let recommendation_indexes = RecommendationIndexes::from_items(&items);
+        let hnsw_index = Arc::new(
+            HnswIndex::new(&HnswConfig {
+                dim: DIM,
+                max_elements: 10,
+                m: 16,
+                ef_construction: 100,
+                ef_search: 50,
+            })
+            .unwrap(),
+        );
         let text_search = Arc::new(TextSearch::new(&format!("{}-tantivy", path)).unwrap());
 
         AppState {
@@ -1245,6 +1356,8 @@ mod tests {
             users,
             items,
             item_map,
+            recommendation_indexes,
+            hnsw_index,
             embedding_model: None,
             text_search,
             metrics: Arc::new(Metrics::default()),

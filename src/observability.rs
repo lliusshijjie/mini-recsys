@@ -3,12 +3,23 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
+const RECOMMENDATION_STAGES: [&str; 7] = [
+    "storage",
+    "semantic_ann",
+    "category_recall",
+    "recent_ann",
+    "popular_fallback",
+    "merge_rank",
+    "total",
+];
+
 #[derive(Debug, Default)]
 pub struct Metrics {
     http_requests_total: AtomicU64,
     http_errors_total: AtomicU64,
     http_latency_micros_total: AtomicU64,
     recommendation_candidates_total: AtomicU64,
+    recommendation_stage_latency_micros_total: [AtomicU64; RECOMMENDATION_STAGES.len()],
     request_sequence: AtomicU64,
 }
 
@@ -31,6 +42,17 @@ impl Metrics {
             .fetch_add(count as u64, Ordering::Relaxed);
     }
 
+    pub fn record_recommendation_stage(&self, stage: &str, latency: Duration) {
+        let Some(index) = RECOMMENDATION_STAGES
+            .iter()
+            .position(|known_stage| *known_stage == stage)
+        else {
+            return;
+        };
+        self.recommendation_stage_latency_micros_total[index]
+            .fetch_add(latency.as_micros() as u64, Ordering::Relaxed);
+    }
+
     pub fn render_prometheus(&self) -> String {
         let requests = self.http_requests_total.load(Ordering::Relaxed);
         let errors = self.http_errors_total.load(Ordering::Relaxed);
@@ -38,7 +60,7 @@ impl Metrics {
             self.http_latency_micros_total.load(Ordering::Relaxed) as f64 / 1_000_000.0;
         let candidates = self.recommendation_candidates_total.load(Ordering::Relaxed);
 
-        format!(
+        let mut output = format!(
             concat!(
                 "# HELP mini_recsys_http_requests_total Total HTTP requests.\n",
                 "# TYPE mini_recsys_http_requests_total counter\n",
@@ -54,7 +76,21 @@ impl Metrics {
                 "mini_recsys_recommendation_candidates_total {}\n",
             ),
             requests, errors, latency_seconds, candidates
-        )
+        );
+        output.push_str(
+            "# HELP mini_recsys_recommendation_stage_latency_seconds_sum Total recommendation stage latency in seconds.\n",
+        );
+        output.push_str("# TYPE mini_recsys_recommendation_stage_latency_seconds_sum counter\n");
+        for (index, stage) in RECOMMENDATION_STAGES.iter().enumerate() {
+            let latency_seconds = self.recommendation_stage_latency_micros_total[index]
+                .load(Ordering::Relaxed) as f64
+                / 1_000_000.0;
+            output.push_str(&format!(
+                "mini_recsys_recommendation_stage_latency_seconds_sum{{stage=\"{}\"}} {:.6}\n",
+                stage, latency_seconds
+            ));
+        }
+        output
     }
 }
 
@@ -70,6 +106,7 @@ mod tests {
         metrics.record_http_request("GET", "/recommend", 200, Duration::from_millis(10));
         metrics.record_http_request("GET", "/recommend", 500, Duration::from_millis(20));
         metrics.record_recommendation_candidates(42);
+        metrics.record_recommendation_stage("category_recall", Duration::from_millis(3));
 
         let output = metrics.render_prometheus();
 
@@ -77,5 +114,8 @@ mod tests {
         assert!(output.contains("mini_recsys_http_errors_total 1"));
         assert!(output.contains("mini_recsys_http_latency_seconds_sum 0.030000"));
         assert!(output.contains("mini_recsys_recommendation_candidates_total 42"));
+        assert!(output.contains(
+            "mini_recsys_recommendation_stage_latency_seconds_sum{stage=\"category_recall\"} 0.003000"
+        ));
     }
 }

@@ -1,5 +1,6 @@
 //! Ranking strategy implementations.
 
+use crate::behavior::UserPreferences;
 use crate::model::{Item, User};
 use crate::recommendation::explain::{reason_for, source_label};
 use crate::recommendation::features::{normalize_score, user_price_affinity, PriceStats};
@@ -102,6 +103,7 @@ pub(super) fn rank_candidate(
     user: &User,
     item: &Item,
     candidate: &Candidate,
+    preferences: Option<&UserPreferences>,
     category_scores: &HashMap<String, f32>,
     price_stats: &PriceStats,
     ranker: &dyn Ranker,
@@ -111,9 +113,7 @@ pub(super) fn rank_candidate(
         .get(&item.category)
         .copied()
         .unwrap_or_default();
-    let (category_preference, item_preference) = candidate
-        .preferences
-        .as_ref()
+    let (category_preference, item_preference) = preferences
         .map(|preferences| {
             (
                 preferences.category_weight(&item.category),

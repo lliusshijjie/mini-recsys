@@ -28,6 +28,7 @@ async fn main() -> Result<()> {
     let storage = init::open_storage(&config)?;
     let text_search = init::open_text_search(&config)?;
     let state = init::init_data_with_storage(
+        &config,
         Arc::clone(&storage),
         embedding_model,
         text_search,
@@ -36,12 +37,11 @@ async fn main() -> Result<()> {
     )?;
 
     init::log_loaded_state(&state);
-    init::init_hnsw_with_hydration(&state.items, &config)?;
     if init::warmup_embedding_model(state.embedding_model.as_deref())? {
         state.readiness.mark_ready();
     }
     println!();
 
     let app = init::build_app(Arc::clone(&state), &config);
-    init::serve_app(app, storage, config).await
+    init::serve_app(app, storage, Arc::clone(&state.hnsw_index), config).await
 }

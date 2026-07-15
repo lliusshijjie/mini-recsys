@@ -2,7 +2,8 @@
 
 use crate::model::{Item, User};
 use crate::recommendation::explain::source_label;
-use crate::recommendation::features::{user_category_scores, PriceStats};
+use crate::recommendation::features::user_category_scores_for_categories;
+use crate::recommendation::indexes::RecommendationIndexes;
 use crate::recommendation::rank::{rank_candidate, score_desc};
 use crate::recommendation::recall::recall_candidates;
 use crate::recommendation::rerank::rerank_for_diversity;
@@ -10,10 +11,24 @@ use crate::recommendation::types::{
     DebugCandidate, RecommendationConfig, RecommendationDebug, RecommendationOutput,
 };
 use std::collections::HashMap;
+use std::time::Instant;
 
+#[cfg(test)]
 pub fn build_recommendations(
     user: &User,
     items: &[Item],
+    semantic_hits: &[(u64, f32)],
+    is_seen: &dyn Fn(u64) -> bool,
+    config: RecommendationConfig,
+) -> RecommendationOutput {
+    let indexes = RecommendationIndexes::from_items(items);
+    build_recommendations_with_indexes(user, items, &indexes, semantic_hits, is_seen, config)
+}
+
+pub fn build_recommendations_with_indexes(
+    user: &User,
+    items: &[Item],
+    indexes: &RecommendationIndexes,
     semantic_hits: &[(u64, f32)],
     is_seen: &dyn Fn(u64) -> bool,
     config: RecommendationConfig,
@@ -26,13 +41,12 @@ pub fn build_recommendations(
         };
     }
 
-    let item_map: HashMap<u64, &Item> = items.iter().map(|item| (item.id, item)).collect();
-    let category_scores = user_category_scores(user, items);
-    let price_stats = PriceStats::from_items(items);
-    let mut candidates = recall_candidates(items, semantic_hits, &category_scores, &config);
-    for candidate in candidates.values_mut() {
-        candidate.preferences = config.preferences.clone();
-    }
+    let pipeline_started = Instant::now();
+    let category_scores = user_category_scores_for_categories(user, indexes.categories());
+    let recall_output = recall_candidates(items, indexes, semantic_hits, &category_scores, &config);
+    let mut stage_durations_micros = recall_output.stage_durations_micros;
+    let quality_metrics = recall_output.quality_metrics;
+    let candidates = recall_output.candidates;
     let debug_candidates: Vec<DebugCandidate> = candidates
         .values()
         .map(|candidate| DebugCandidate {
@@ -44,6 +58,7 @@ pub fn build_recommendations(
     let candidate_count = candidates.len();
     let ranker = config.ranking_strategy.ranker();
 
+    let merge_rank_started = Instant::now();
     let mut filtered_count = 0usize;
     let mut ranked = Vec::new();
 
@@ -53,7 +68,7 @@ pub fn build_recommendations(
             continue;
         }
 
-        let Some(item) = item_map.get(&candidate.item_id) else {
+        let Some(item) = indexes.item(items, candidate.item_id) else {
             continue;
         };
 
@@ -61,8 +76,9 @@ pub fn build_recommendations(
             user,
             item,
             &candidate,
+            config.preferences.as_ref(),
             &category_scores,
-            &price_stats,
+            indexes.price_stats(),
             ranker.as_ref(),
         ));
     }
@@ -77,6 +93,14 @@ pub fn build_recommendations(
             .or_insert(0) += 1;
         *source_distribution.entry(item.source.clone()).or_insert(0) += 1;
     }
+    stage_durations_micros.insert(
+        "merge_rank".to_string(),
+        merge_rank_started.elapsed().as_micros() as u64,
+    );
+    stage_durations_micros.insert(
+        "total".to_string(),
+        pipeline_started.elapsed().as_micros() as u64,
+    );
 
     RecommendationOutput {
         items: reranked,
@@ -86,6 +110,8 @@ pub fn build_recommendations(
             candidates: debug_candidates,
             category_distribution,
             source_distribution,
+            stage_durations_micros,
+            quality_metrics,
         },
     }
 }

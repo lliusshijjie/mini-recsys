@@ -15,6 +15,73 @@ preference updates, and recommendation debugging. The system remains small and
 rule-driven: it avoids large-scale model training infrastructure while keeping a
 clear extension point for future machine-learning ranking.
 
+## Recommendation Architecture
+
+The service is a single Rust API process that orchestrates storage, recall,
+ranking, reranking, and explanation. C++ owns the HNSW/vector-search kernel,
+while Rust owns request handling, filtering, merging, ranking, and debug output.
+
+```mermaid
+flowchart TD
+    Client[Client / React UI] -->|GET /recommend?uid| Axum[Axum Rust API]
+    Client -->|GET /search?q| SearchApi[Hybrid Search API]
+    Client -->|POST /events| Events[Behavior Event API]
+
+    Axum --> Storage[(Sled: users, events, preferences, seen filters)]
+    Axum --> AppState[AppState: items, item map, RecommendationIndexes]
+    Axum --> Semantic[Semantic recall]
+    Semantic --> HnswRust[Rust HnswIndex RAII wrapper]
+    HnswRust --> HnswCpp[C++ HNSW handle / batch vector search]
+    HnswCpp --> HnswFile[(data/index HNSW snapshot)]
+
+    AppState --> Category[Category-profile recall]
+    AppState --> Popular[Popular fallback recall]
+    Storage --> RecentSeeds[Recent click / like seeds]
+    RecentSeeds --> RecentMode{Recent recall mode}
+    RecentMode -->|exact| RecentExact[Exact same-category vector scan]
+    RecentMode -->|shadow| RecentShadow[Exact serving + ANN quality metric]
+    RecentMode -->|ann| RecentAnn[Batch ANN from C++ HNSW]
+
+    Semantic --> Merge[Merge candidates and sources]
+    Category --> Merge
+    Popular --> Merge
+    RecentExact --> Merge
+    RecentShadow --> Merge
+    RecentAnn --> Merge
+
+    Merge --> Seen[Seen-item Bloom filter]
+    Seen --> Rank[Fixed-weight ranker / ML-reserved fallback]
+    Rank --> Rerank[Diversity and exploration rerank]
+    Rerank --> Explain[Source labels, reasons, debug metrics]
+    Explain --> Response[Recommendation response]
+
+    SearchApi --> Embed[ONNX MiniLM embedding]
+    Embed --> HnswRust
+    SearchApi --> Tantivy[Tantivy keyword index]
+    HnswRust --> RRF[Reciprocal Rank Fusion]
+    Tantivy --> RRF
+    RRF --> SearchResponse[Search response]
+
+    Events --> Storage
+    Events --> Preferences[Update category / item preferences]
+    Events --> SeenWrite[Update seen Bloom filter on impression]
+    Preferences --> Storage
+    SeenWrite --> Storage
+```
+
+Key runtime boundaries:
+
+- `src/init.rs` builds `AppState`, loads local data, hydrates the HNSW index,
+  and wires request handlers.
+- `src/recommendation/` owns recall, ranking, reranking, explanation, and debug
+  contracts.
+- `src/ffi.rs` is the only Rust unsafe boundary; safe wrappers expose C++ HNSW
+  operations to the service.
+- `cpp/vector_ops.cpp` owns HNSW index handles, query-time search, and batch
+  vector search.
+- `Sled`, `Tantivy`, and HNSW snapshots are local writable state, so the current
+  deployment model is single-replica.
+
 ## Features
 
 - Multi-source recall:
@@ -206,6 +273,45 @@ cargo clippy --fix --allow-dirty --allow-staged
 cargo check
 cargo test
 ```
+
+## Performance Benchmarks
+
+Phase 2/3 performance checks are exposed as ignored Rust tests so they do not
+run in normal CI. Use release mode and a single test thread for comparable
+numbers.
+
+Run the HNSW concurrency matrix:
+
+```bash
+MINI_RECSYS_PERF_DATASETS=10000,100000 \
+MINI_RECSYS_PERF_CONCURRENCY=1,8,32 \
+MINI_RECSYS_PERF_QUERIES=256 \
+cargo test --release performance_matrix -- --ignored --nocapture --test-threads=1
+```
+
+This prints build time, QPS, and p50/p95/p99 search latency for the C++ HNSW
+handle path. Useful knobs:
+
+- `MINI_RECSYS_PERF_DIM`: vector dimension, default `384`.
+- `MINI_RECSYS_PERF_K`: neighbors per query, default `100`.
+- `MINI_RECSYS_PERF_DATASETS`: comma-separated dataset sizes.
+- `MINI_RECSYS_PERF_CONCURRENCY`: comma-separated worker counts.
+- `MINI_RECSYS_PERF_QUERIES`: total queries per concurrency level.
+
+Run the recent-item ANN quality check:
+
+```bash
+MINI_RECSYS_PERF_DATASETS=10000,100000 \
+MINI_RECSYS_RECENT_ANN_K=200 \
+cargo test --release recent_ann_quality_against_exact -- --ignored --nocapture --test-threads=1
+```
+
+This compares recent-item ANN recall against the exact same-category scan and
+prints exact latency, ANN latency, recall overlap, final Top-10 overlap, and the
+shadow-mode `recent_ann_overlap` metric. The default guardrails are:
+
+- `MINI_RECSYS_RECENT_RECALL_THRESHOLD=0.95`
+- `MINI_RECSYS_TOP10_OVERLAP_THRESHOLD=0.90`
 
 Run this before committing frontend or API-response changes:
 

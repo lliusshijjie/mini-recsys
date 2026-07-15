@@ -5,6 +5,8 @@
 extern "C" {
 #endif
 
+#include <stdint.h>
+
 // ============================================================================
 // Basic vector operations
 // ============================================================================
@@ -15,6 +17,36 @@ float dot_product(const float* vec_a, const float* vec_b, int len);
 // ============================================================================
 // HNSW index operations
 // ============================================================================
+
+typedef struct HnswIndexHandle HnswIndexHandle;
+
+HnswIndexHandle* hnsw_create_index(int dim, int max_elements, int M, int ef_construction);
+HnswIndexHandle* hnsw_load_or_create_index(
+    const char* path,
+    int dim,
+    int max_elements,
+    int* out_status
+);
+int hnsw_index_add_item(HnswIndexHandle* handle, uint64_t id, const float* vector);
+void hnsw_index_set_ef(HnswIndexHandle* handle, int ef);
+int hnsw_index_search_knn(
+    HnswIndexHandle* handle,
+    const float* query,
+    int k,
+    uint64_t* out_ids,
+    float* out_scores
+);
+int hnsw_index_search_batch(
+    HnswIndexHandle* handle,
+    const float* queries,
+    int query_count,
+    int k,
+    uint64_t* out_ids,
+    float* out_scores
+);
+uint64_t hnsw_index_get_count(HnswIndexHandle* handle);
+int hnsw_index_save(HnswIndexHandle* handle, const char* path);
+void hnsw_free_index(HnswIndexHandle* handle);
 
 /// Initialize the HNSW index.
 ///
