@@ -45,6 +45,7 @@ pub struct RecommendationDebug {
     pub candidates: Vec<DebugCandidate>,
     pub category_distribution: HashMap<String, usize>,
     pub source_distribution: HashMap<String, usize>,
+    pub stage_durations_micros: HashMap<String, u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -78,7 +79,6 @@ pub(super) struct Candidate {
     pub item_id: u64,
     pub semantic_score: f32,
     pub sources: HashSet<RecallSource>,
-    pub preferences: Option<UserPreferences>,
 }
 
 impl Candidate {
@@ -87,7 +87,6 @@ impl Candidate {
             item_id,
             semantic_score: 0.0,
             sources: HashSet::new(),
-            preferences: None,
         }
     }
 

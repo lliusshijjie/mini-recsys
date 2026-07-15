@@ -62,6 +62,73 @@ fn pipeline_merges_sources_filters_seen_and_explains_results() {
 }
 
 #[test]
+fn indexed_pipeline_matches_default_pipeline_output() {
+    let user = User {
+        id: 1,
+        name: "Indexed user".to_string(),
+        embedding: normalized_category("Books"),
+        profile: UserProfile::build(&[("Books", 0.8), ("Electronics", 0.4)], 10.0, 250.0),
+    };
+    let items = vec![
+        item(1, "Books", 0.40, 20.0),
+        item(2, "Books", 0.90, 22.0),
+        item(3, "Electronics", 0.95, 200.0),
+        item(4, "Home", 0.80, 35.0),
+        item(5, "Clothing", 0.30, 45.0),
+    ];
+    let indexes = RecommendationIndexes::from_items(&items);
+    let semantic_hits = vec![(1, 0.95), (2, 0.92), (3, 0.10)];
+    let recent_events = vec![BehaviorEvent::new(1, 1, EventType::Click, "Books")];
+    let mut preferences = UserPreferences::default();
+    preferences.set_item_weight(3, 1.0);
+    let seen: HashSet<u64> = [1].into_iter().collect();
+    let config = RecommendationConfig {
+        limit: 4,
+        preferences: Some(preferences),
+        recent_events,
+        ..Default::default()
+    };
+
+    let baseline = build_recommendations(
+        &user,
+        &items,
+        &semantic_hits,
+        &|item_id| seen.contains(&item_id),
+        config.clone(),
+    );
+    let indexed = build_recommendations_with_indexes(
+        &user,
+        &items,
+        &indexes,
+        &semantic_hits,
+        &|item_id| seen.contains(&item_id),
+        config,
+    );
+
+    assert_eq!(
+        baseline
+            .items
+            .iter()
+            .map(|item| item.item_id)
+            .collect::<Vec<_>>(),
+        indexed
+            .items
+            .iter()
+            .map(|item| item.item_id)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(baseline.filtered_count, indexed.filtered_count);
+    assert_eq!(
+        baseline.debug.candidate_count,
+        indexed.debug.candidate_count
+    );
+    assert_eq!(
+        baseline.debug.source_distribution,
+        indexed.debug.source_distribution
+    );
+}
+
+#[test]
 fn pipeline_limits_category_dominance_in_top_results() {
     let user = User {
         id: 1,
@@ -263,6 +330,22 @@ fn output_includes_debug_metadata_for_evaluation() {
         output.debug.source_distribution.values().sum::<usize>(),
         output.items.len()
     );
+    assert!(output
+        .debug
+        .stage_durations_micros
+        .contains_key("category_recall"));
+    assert!(output
+        .debug
+        .stage_durations_micros
+        .contains_key("recent_ann"));
+    assert!(output
+        .debug
+        .stage_durations_micros
+        .contains_key("popular_fallback"));
+    assert!(output
+        .debug
+        .stage_durations_micros
+        .contains_key("merge_rank"));
 }
 
 #[test]

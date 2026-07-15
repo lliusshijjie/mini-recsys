@@ -11,8 +11,8 @@ use crate::model::{
 };
 use crate::observability::Metrics;
 use crate::recommendation::{
-    build_recommendations, RankingStrategyKind, RecommendationConfig, RecommendationOutput,
-    RecommendedItem as PipelineRecommendedItem,
+    build_recommendations_with_indexes, RankingStrategyKind, RecommendationConfig,
+    RecommendationIndexes, RecommendationOutput, RecommendedItem as PipelineRecommendedItem,
 };
 use crate::storage::Storage;
 use crate::text_search::TextSearch;
@@ -34,7 +34,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tower_http::cors::{Any, CorsLayer};
 
 // ============================================================================
@@ -46,6 +46,7 @@ pub struct AppState {
     pub users: Vec<User>,
     pub items: Vec<Item>,
     pub item_map: HashMap<u64, usize>,
+    pub recommendation_indexes: RecommendationIndexes,
     pub embedding_model: Option<Arc<embedding::EmbeddingModel>>,
     pub text_search: Arc<TextSearch>,
     pub metrics: Arc<Metrics>,
@@ -192,6 +193,11 @@ async fn recommend_handler(
     state
         .metrics
         .record_recommendation_candidates(output.debug.candidate_count);
+    for (stage, latency_micros) in &output.debug.stage_durations_micros {
+        state
+            .metrics
+            .record_recommendation_stage(stage, Duration::from_micros(*latency_micros));
+    }
     println!(
         "{}",
         json!({
@@ -219,6 +225,7 @@ fn build_user_recommendation_output(
     state: &AppState,
     uid: u64,
 ) -> Result<(&User, RecommendationOutput), (StatusCode, Json<ErrorResponse>)> {
+    let total_started = Instant::now();
     let user = state.users.iter().find(|u| u.id == uid).ok_or_else(|| {
         (
             StatusCode::NOT_FOUND,
@@ -228,7 +235,11 @@ fn build_user_recommendation_output(
         )
     })?;
 
+    let semantic_started = Instant::now();
     let semantic_hits = hnsw_search(&user.embedding, 100);
+    let semantic_duration_micros = semantic_started.elapsed().as_micros() as u64;
+
+    let storage_started = Instant::now();
     let preferences = state.storage.get_user_preferences(uid).map_err(|e| {
         (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -253,10 +264,12 @@ fn build_user_recommendation_output(
             }),
         )
     })?;
+    let storage_duration_micros = storage_started.elapsed().as_micros() as u64;
 
-    let output = build_recommendations(
+    let mut output = build_recommendations_with_indexes(
         user,
         &state.items,
+        &state.recommendation_indexes,
         &semantic_hits,
         &|item_id| filter.contains(&item_id.to_le_bytes()),
         RecommendationConfig {
@@ -265,6 +278,18 @@ fn build_user_recommendation_output(
             recent_events: recent_events.items,
             ..Default::default()
         },
+    );
+    output
+        .debug
+        .stage_durations_micros
+        .insert("semantic_ann".to_string(), semantic_duration_micros);
+    output
+        .debug
+        .stage_durations_micros
+        .insert("storage".to_string(), storage_duration_micros);
+    output.debug.stage_durations_micros.insert(
+        "total".to_string(),
+        total_started.elapsed().as_micros() as u64,
     );
 
     Ok((user, output))
@@ -831,12 +856,10 @@ fn should_reseed_users(storage: &Storage) -> Result<bool> {
     }
 
     match storage.get_all_users() {
-        Ok(users) => Ok(
-            users.len() < USER_SEED_COUNT
-                || users
-                    .iter()
-                    .all(|user| user.profile.category_weights.is_empty()),
-        ),
+        Ok(users) => Ok(users.len() < USER_SEED_COUNT
+            || users
+                .iter()
+                .all(|user| user.profile.category_weights.is_empty())),
         Err(_) => Ok(true),
     }
 }
@@ -946,12 +969,14 @@ pub fn init_data_with_storage(
         .enumerate()
         .map(|(i, item)| (item.id, i))
         .collect();
+    let recommendation_indexes = RecommendationIndexes::from_items(&items);
 
     Ok(Arc::new(AppState {
         storage,
         users,
         items,
         item_map,
+        recommendation_indexes,
         embedding_model,
         text_search,
         metrics,
@@ -1238,6 +1263,7 @@ mod tests {
             .enumerate()
             .map(|(index, item)| (item.id, index))
             .collect();
+        let recommendation_indexes = RecommendationIndexes::from_items(&items);
         let text_search = Arc::new(TextSearch::new(&format!("{}-tantivy", path)).unwrap());
 
         AppState {
@@ -1245,6 +1271,7 @@ mod tests {
             users,
             items,
             item_map,
+            recommendation_indexes,
             embedding_model: None,
             text_search,
             metrics: Arc::new(Metrics::default()),

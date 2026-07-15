@@ -11,6 +11,13 @@ pub(super) struct PriceStats {
 
 impl PriceStats {
     pub(super) fn from_items(items: &[Item]) -> Self {
+        if items.is_empty() {
+            return Self {
+                average: 0.0,
+                max_delta: 0.0,
+            };
+        }
+
         let average = items.iter().map(|item| item.price).sum::<f32>() / items.len() as f32;
         let max_delta = items
             .iter()
@@ -28,12 +35,15 @@ impl PriceStats {
     }
 }
 
-pub(super) fn user_category_scores(user: &User, items: &[Item]) -> HashMap<String, f32> {
+pub(super) fn user_category_scores_for_categories(
+    user: &User,
+    categories: &[String],
+) -> HashMap<String, f32> {
     let mut scores = HashMap::new();
-    for item in items {
+    for category in categories {
         scores
-            .entry(item.category.clone())
-            .or_insert_with(|| category_score_for_user(user, &item.category));
+            .entry(category.clone())
+            .or_insert_with(|| category_score_for_user(user, category));
     }
     scores
 }

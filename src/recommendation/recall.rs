@@ -3,9 +3,11 @@
 use crate::behavior::{BehaviorEvent, EventType};
 use crate::model::Item;
 use crate::recommendation::features::normalize_score;
+use crate::recommendation::indexes::RecommendationIndexes;
 use crate::recommendation::types::{Candidate, RecommendationConfig};
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
+use std::time::{Duration, Instant};
 
 const RECALL_MULTIPLIER: usize = 4;
 const MIN_RECALL_POOL: usize = 20;
@@ -39,37 +41,62 @@ struct RecallHit {
 
 struct RecallContext<'a> {
     items: &'a [Item],
+    indexes: &'a RecommendationIndexes,
     semantic_hits: &'a [(u64, f32)],
     category_scores: &'a HashMap<String, f32>,
     recent_events: &'a [BehaviorEvent],
     pool_size: usize,
 }
 
+pub(super) struct RecallOutput {
+    pub candidates: HashMap<u64, Candidate>,
+    pub stage_durations_micros: HashMap<String, u64>,
+}
+
 pub(super) fn recall_candidates(
     items: &[Item],
+    indexes: &RecommendationIndexes,
     semantic_hits: &[(u64, f32)],
     category_scores: &HashMap<String, f32>,
     config: &RecommendationConfig,
-) -> HashMap<u64, Candidate> {
+) -> RecallOutput {
     let context = RecallContext {
         items,
+        indexes,
         semantic_hits,
         category_scores,
         recent_events: &config.recent_events,
         pool_size: (config.limit * RECALL_MULTIPLIER).max(MIN_RECALL_POOL),
     };
     let mut candidates = HashMap::new();
+    let mut stage_durations_micros = HashMap::new();
 
-    merge_hits(&mut candidates, recall_semantic_ann(&context));
-    merge_hits(&mut candidates, recall_category_profile(&context));
-    merge_hits(&mut candidates, recall_recent_item_similarity(&context));
-    merge_popular_fallback(
-        &mut candidates,
-        recall_popular_fallback(&context),
-        context.pool_size,
-    );
+    let (hits, elapsed) = timed(|| recall_semantic_ann(&context));
+    stage_durations_micros.insert("semantic_ann".to_string(), elapsed.as_micros() as u64);
+    merge_hits(&mut candidates, hits);
 
-    candidates
+    let (hits, elapsed) = timed(|| recall_category_profile(&context));
+    stage_durations_micros.insert("category_recall".to_string(), elapsed.as_micros() as u64);
+    merge_hits(&mut candidates, hits);
+
+    let (hits, elapsed) = timed(|| recall_recent_item_similarity(&context));
+    stage_durations_micros.insert("recent_ann".to_string(), elapsed.as_micros() as u64);
+    merge_hits(&mut candidates, hits);
+
+    let (hits, elapsed) = timed(|| recall_popular_fallback(&context));
+    stage_durations_micros.insert("popular_fallback".to_string(), elapsed.as_micros() as u64);
+    merge_popular_fallback(&mut candidates, hits, context.pool_size);
+
+    RecallOutput {
+        candidates,
+        stage_durations_micros,
+    }
+}
+
+fn timed<T>(operation: impl FnOnce() -> T) -> (T, Duration) {
+    let started = Instant::now();
+    let value = operation();
+    (value, started.elapsed())
 }
 
 fn recall_semantic_ann(context: &RecallContext<'_>) -> Vec<RecallHit> {
@@ -85,18 +112,20 @@ fn recall_semantic_ann(context: &RecallContext<'_>) -> Vec<RecallHit> {
 }
 
 fn recall_category_profile(context: &RecallContext<'_>) -> Vec<RecallHit> {
-    let mut category_items: Vec<&Item> = context
-        .items
-        .iter()
-        .filter(|item| {
-            context
-                .category_scores
-                .get(&item.category)
-                .copied()
-                .unwrap_or_default()
-                > 0.0
-        })
-        .collect();
+    let mut category_items = Vec::new();
+    for (category, score) in context.category_scores {
+        if *score <= 0.0 {
+            continue;
+        }
+        let Some(item_ids) = context.indexes.category_item_ids(category) else {
+            continue;
+        };
+        category_items.extend(
+            item_ids
+                .iter()
+                .filter_map(|item_id| context.indexes.item(context.items, *item_id)),
+        );
+    }
 
     category_items.sort_by(|a, b| {
         let a_score = context
@@ -135,7 +164,6 @@ fn recall_category_profile(context: &RecallContext<'_>) -> Vec<RecallHit> {
 }
 
 fn recall_recent_item_similarity(context: &RecallContext<'_>) -> Vec<RecallHit> {
-    let item_map: HashMap<u64, &Item> = context.items.iter().map(|item| (item.id, item)).collect();
     let seed_ids = recent_positive_seed_ids(context.recent_events);
     if seed_ids.is_empty() {
         return Vec::new();
@@ -143,7 +171,7 @@ fn recall_recent_item_similarity(context: &RecallContext<'_>) -> Vec<RecallHit> 
 
     let mut hits = Vec::new();
     for seed_id in &seed_ids {
-        let Some(seed) = item_map.get(seed_id) else {
+        let Some(seed) = context.indexes.item(context.items, *seed_id) else {
             continue;
         };
 
@@ -178,15 +206,11 @@ fn recent_positive_seed_ids(recent_events: &[BehaviorEvent]) -> HashSet<u64> {
 }
 
 fn recall_popular_fallback(context: &RecallContext<'_>) -> Vec<RecallHit> {
-    let mut popular_items: Vec<&Item> = context.items.iter().collect();
-    popular_items.sort_by(|a, b| {
-        b.popularity
-            .partial_cmp(&a.popularity)
-            .unwrap_or(Ordering::Equal)
-    });
-
-    popular_items
-        .into_iter()
+    context
+        .indexes
+        .popular_item_ids()
+        .iter()
+        .filter_map(|item_id| context.indexes.item(context.items, *item_id))
         .map(|item| RecallHit {
             item_id: item.id,
             score: normalize_score(item.popularity),
