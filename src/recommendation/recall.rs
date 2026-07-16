@@ -1,5 +1,8 @@
 //! Candidate recall sources for recommendations.
 
+use crate::algorithms::{
+    cosine_similarity_simd, merge_filter_topk, partial_topk_by, ScoredCandidate,
+};
 use crate::behavior::{BehaviorEvent, EventType};
 use crate::model::Item;
 use crate::recommendation::features::normalize_score;
@@ -12,6 +15,9 @@ use std::time::{Duration, Instant};
 const RECALL_MULTIPLIER: usize = 4;
 const MIN_RECALL_POOL: usize = 20;
 const RECENT_SIMILARITY_MIN_SCORE: f32 = 0.30;
+const SEMANTIC_SOURCE_MASK: u8 = 1 << 0;
+const CATEGORY_SOURCE_MASK: u8 = 1 << 1;
+const RECENT_SOURCE_MASK: u8 = 1 << 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(super) enum RecallSource {
@@ -71,7 +77,6 @@ pub(super) fn recall_candidates(
         recent_ann_hits: &config.recent_ann_hits,
         pool_size: (config.limit * RECALL_MULTIPLIER).max(MIN_RECALL_POOL),
     };
-    let mut candidates = HashMap::new();
     let mut stage_durations_micros = HashMap::new();
     let recall_sources = if items.len() >= config.recall_parallel_min_items {
         recall_sources_parallel(&context, config.recent_recall_mode)
@@ -84,23 +89,25 @@ pub(super) fn recall_candidates(
         "semantic_ann".to_string(),
         recall_sources.semantic_elapsed.as_micros() as u64,
     );
-    merge_hits(&mut candidates, recall_sources.semantic_hits);
 
     stage_durations_micros.insert(
         "category_recall".to_string(),
         recall_sources.category_elapsed.as_micros() as u64,
     );
-    merge_hits(&mut candidates, recall_sources.category_hits);
 
     stage_durations_micros.insert(
         "recent_ann".to_string(),
         recall_sources.recent_elapsed.as_micros() as u64,
     );
-    merge_hits(&mut candidates, recall_sources.recent_hits);
 
     stage_durations_micros.insert(
         "popular_fallback".to_string(),
         recall_sources.popular_elapsed.as_micros() as u64,
+    );
+    let mut candidates = merge_primary_hits(
+        recall_sources.semantic_hits,
+        recall_sources.category_hits,
+        recall_sources.recent_hits,
     );
     merge_popular_fallback(
         &mut candidates,
@@ -214,31 +221,37 @@ fn recall_category_profile(context: &RecallContext<'_>) -> Vec<RecallHit> {
         );
     }
 
-    category_items.sort_by(|a, b| {
-        let a_score = context
-            .category_scores
-            .get(&a.category)
-            .copied()
-            .unwrap_or_default();
-        let b_score = context
-            .category_scores
-            .get(&b.category)
-            .copied()
-            .unwrap_or_default();
-        b_score
-            .partial_cmp(&a_score)
-            .unwrap_or(Ordering::Equal)
-            .then_with(|| {
-                b.popularity
-                    .partial_cmp(&a.popularity)
-                    .unwrap_or(Ordering::Equal)
-            })
-    });
+    let mut indexed_items: Vec<(usize, &Item)> = category_items.into_iter().enumerate().collect();
+    partial_topk_by(
+        &mut indexed_items,
+        context.pool_size,
+        |(left_index, a), (right_index, b)| {
+            let a_score = context
+                .category_scores
+                .get(&a.category)
+                .copied()
+                .unwrap_or_default();
+            let b_score = context
+                .category_scores
+                .get(&b.category)
+                .copied()
+                .unwrap_or_default();
+            b_score
+                .partial_cmp(&a_score)
+                .unwrap_or(Ordering::Equal)
+                .then_with(|| {
+                    b.popularity
+                        .partial_cmp(&a.popularity)
+                        .unwrap_or(Ordering::Equal)
+                })
+                .then_with(|| left_index.cmp(right_index))
+        },
+    );
 
-    category_items
+    indexed_items
         .into_iter()
         .take(context.pool_size)
-        .map(|item| RecallHit {
+        .map(|(_, item)| RecallHit {
             item_id: item.id,
             score: context
                 .category_scores
@@ -299,8 +312,7 @@ fn recall_recent_item_similarity_exact(context: &RecallContext<'_>) -> Vec<Recal
         }
     }
 
-    hits.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
-    hits.truncate(context.pool_size);
+    truncate_hits_by_score_preserving_ties(&mut hits, context.pool_size);
     hits
 }
 
@@ -393,16 +405,21 @@ fn recall_popular_fallback(context: &RecallContext<'_>) -> Vec<RecallHit> {
         .collect()
 }
 
-fn merge_hits(candidates: &mut HashMap<u64, Candidate>, hits: Vec<RecallHit>) {
-    for hit in hits {
-        let candidate = candidates
-            .entry(hit.item_id)
-            .or_insert_with(|| Candidate::new(hit.item_id));
-        if hit.source == RecallSource::SemanticAnn {
-            candidate.semantic_score = candidate.semantic_score.max(hit.score);
-        }
-        candidate.add_source(hit.source);
-    }
+fn merge_primary_hits(
+    semantic_hits: Vec<RecallHit>,
+    category_hits: Vec<RecallHit>,
+    recent_hits: Vec<RecallHit>,
+) -> HashMap<u64, Candidate> {
+    let mut scored_hits =
+        Vec::with_capacity(semantic_hits.len() + category_hits.len() + recent_hits.len());
+    scored_hits.extend(semantic_hits.into_iter().map(scored_hit_for_merge));
+    scored_hits.extend(category_hits.into_iter().map(scored_hit_for_merge));
+    scored_hits.extend(recent_hits.into_iter().map(scored_hit_for_merge));
+
+    merge_filter_topk(&scored_hits, &[], usize::MAX)
+        .into_iter()
+        .map(|scored| (scored.item_id, candidate_from_scored(scored)))
+        .collect()
 }
 
 fn merge_popular_fallback(
@@ -425,21 +442,65 @@ fn merge_popular_fallback(
 }
 
 fn embedding_similarity(left: &[f32], right: &[f32]) -> f32 {
-    if left.is_empty() || left.len() != right.len() {
-        return 0.0;
+    normalize_score(cosine_similarity_simd(left, right))
+}
+
+fn truncate_hits_by_score_preserving_ties(hits: &mut Vec<RecallHit>, pool_size: usize) {
+    let mut indexed_hits: Vec<(usize, RecallHit)> =
+        std::mem::take(hits).into_iter().enumerate().collect();
+    partial_topk_by(
+        &mut indexed_hits,
+        pool_size,
+        |(left_index, left), (right_index, right)| {
+            right
+                .score
+                .partial_cmp(&left.score)
+                .unwrap_or(Ordering::Equal)
+                .then_with(|| left_index.cmp(right_index))
+        },
+    );
+    *hits = indexed_hits.into_iter().map(|(_, hit)| hit).collect();
+}
+
+fn scored_hit_for_merge(hit: RecallHit) -> ScoredCandidate {
+    let score = if hit.source == RecallSource::SemanticAnn {
+        hit.score
+    } else {
+        0.0
+    };
+    ScoredCandidate::new(hit.item_id, score, source_mask(hit.source))
+}
+
+fn candidate_from_scored(scored: ScoredCandidate) -> Candidate {
+    let mut candidate = Candidate::new(scored.item_id);
+    candidate.semantic_score = scored.score;
+    for source in sources_from_mask(scored.source_mask) {
+        candidate.add_source(source);
     }
+    candidate
+}
 
-    let left_norm = left.iter().map(|value| value * value).sum::<f32>().sqrt();
-    let right_norm = right.iter().map(|value| value * value).sum::<f32>().sqrt();
-    if left_norm == 0.0 || right_norm == 0.0 {
-        return 0.0;
+fn source_mask(source: RecallSource) -> u8 {
+    match source {
+        RecallSource::SemanticAnn => SEMANTIC_SOURCE_MASK,
+        RecallSource::CategoryProfile => CATEGORY_SOURCE_MASK,
+        RecallSource::RecentItemSimilarity => RECENT_SOURCE_MASK,
+        RecallSource::PopularFallback => 0,
     }
+}
 
-    let dot = left
-        .iter()
-        .zip(right.iter())
-        .map(|(left, right)| left * right)
-        .sum::<f32>();
-
-    normalize_score(dot / (left_norm * right_norm))
+fn sources_from_mask(mask: u8) -> impl Iterator<Item = RecallSource> {
+    [
+        (SEMANTIC_SOURCE_MASK, RecallSource::SemanticAnn),
+        (CATEGORY_SOURCE_MASK, RecallSource::CategoryProfile),
+        (RECENT_SOURCE_MASK, RecallSource::RecentItemSimilarity),
+    ]
+    .into_iter()
+    .filter_map(move |(source_mask, source)| {
+        if mask & source_mask != 0 {
+            Some(source)
+        } else {
+            None
+        }
+    })
 }

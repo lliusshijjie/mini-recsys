@@ -1,5 +1,6 @@
 //! Mini-RecSys service entrypoint.
 
+mod algorithms;
 mod behavior;
 mod config;
 mod embedding;
