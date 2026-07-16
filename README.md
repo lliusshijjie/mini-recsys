@@ -283,7 +283,7 @@ numbers.
 Run the HNSW concurrency matrix:
 
 ```bash
-MINI_RECSYS_PERF_DATASETS=10000,100000 \
+MINI_RECSYS_PERF_DATASETS=10000,50000 \
 MINI_RECSYS_PERF_CONCURRENCY=1,8,32 \
 MINI_RECSYS_PERF_QUERIES=256 \
 cargo test --release performance_matrix -- --ignored --nocapture --test-threads=1
@@ -298,10 +298,26 @@ handle path. Useful knobs:
 - `MINI_RECSYS_PERF_CONCURRENCY`: comma-separated worker counts.
 - `MINI_RECSYS_PERF_QUERIES`: total queries per concurrency level.
 
+Run the recommendation pipeline matrix:
+
+```bash
+MINI_RECSYS_PERF_DATASETS=10000,50000 \
+MINI_RECSYS_PERF_CONCURRENCY=1,8,32 \
+MINI_RECSYS_PERF_QUERIES=256 \
+cargo test --release recommendation_pipeline_performance_matrix -- --ignored --nocapture --test-threads=1
+```
+
+This exercises the serving hot path after storage: semantic HNSW search, recent
+ANN seed recall, indexed recommendation pipeline execution, candidate
+merge/filter, ranking, and diversity rerank. Useful knobs:
+
+- `MINI_RECSYS_PIPELINE_SEMANTIC_K`: semantic ANN candidates, default `100`.
+- `MINI_RECSYS_PIPELINE_RECENT_ANN_K`: recent seed ANN candidates, default `100`.
+
 Run the recent-item ANN quality check:
 
 ```bash
-MINI_RECSYS_PERF_DATASETS=10000,100000 \
+MINI_RECSYS_PERF_DATASETS=10000,50000 \
 MINI_RECSYS_RECENT_ANN_K=200 \
 cargo test --release recent_ann_quality_against_exact -- --ignored --nocapture --test-threads=1
 ```
@@ -315,21 +331,36 @@ shadow-mode `recent_ann_overlap` metric. The default guardrails are:
 
 ### Observed Local Results
 
-The following numbers were collected on 2026-07-15 with `cargo test --release`
+The following numbers were collected on 2026-07-16 with `cargo test --release`
 on a local Windows workstation. They use deterministic synthetic vectors and
 should be treated as local trend data, not production traffic.
 
 HNSW matrix settings: `dim=384`, `k=100`, `queries=256`,
-`concurrency=1,8,32`.
+`concurrency=1,8,32`. This matrix measures the C++ HNSW handle path; it is a
+serving baseline, not an isolated benchmark of the Rust candidate merge/filter
+kernels.
 
 | Dataset | Concurrency | QPS | p50 | p95 | p99 | Build time |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 10,000 | 1 | 4,424 | 204us | 350us | 480us | 3.94s |
-| 10,000 | 8 | 21,739 | 283us | 532us | 880us | 3.94s |
-| 10,000 | 32 | 27,659 | 394us | 639us | 993us | 3.94s |
-| 50,000 | 1 | 1,716 | 535us | 849us | 941us | 49.47s |
-| 50,000 | 8 | 8,087 | 821us | 1.37ms | 1.70ms | 49.47s |
-| 50,000 | 32 | 11,626 | 1.15ms | 1.69ms | 3.18ms | 49.47s |
+| 10,000 | 1 | 3,008 | 313us | 440us | 533us | 5.72s |
+| 10,000 | 8 | 15,637 | 345us | 623us | 1.21ms | 5.72s |
+| 10,000 | 32 | 21,602 | 446us | 812us | 1.30ms | 5.72s |
+| 50,000 | 1 | 1,828 | 523us | 695us | 759us | 59.13s |
+| 50,000 | 8 | 7,538 | 872us | 1.43ms | 1.85ms | 59.13s |
+| 50,000 | 32 | 10,576 | 1.25ms | 2.27ms | 4.47ms | 59.13s |
+
+Recommendation pipeline matrix settings: `semantic_k=100`, `recent_ann_k=100`,
+`queries=256`, `concurrency=1,8,32`. This includes semantic HNSW search, recent
+ANN seed recall, four-way recall, candidate merge/filter, ranking, and rerank.
+
+| Dataset | Concurrency | QPS | p50 | p95 | p99 | Build time | Avg candidates |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 10,000 | 1 | 789 | 1.14ms | 1.94ms | 2.37ms | 3.44s | 176.5 |
+| 10,000 | 8 | 4,136 | 1.66ms | 2.69ms | 3.20ms | 3.44s | 176.5 |
+| 10,000 | 32 | 5,872 | 3.38ms | 8.39ms | 11.67ms | 3.44s | 176.5 |
+| 50,000 | 1 | 185 | 5.40ms | 6.68ms | 7.29ms | 42.55s | 179.0 |
+| 50,000 | 8 | 1,313 | 5.95ms | 7.14ms | 7.83ms | 42.55s | 179.0 |
+| 50,000 | 32 | 1,968 | 10.56ms | 26.10ms | 36.90ms | 42.55s | 179.0 |
 
 Recent-item recall quality settings: one recent positive event, synthetic item
 catalog, exact same-category scan compared with ANN candidates.

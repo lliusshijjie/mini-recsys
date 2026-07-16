@@ -1,10 +1,14 @@
 //! Candidate filtering, deduplication, source merging, and top-k selection.
 
+#[cfg(test)]
 use crate::algorithms::aligned::AlignedBuffer;
+#[cfg(test)]
 use crate::algorithms::topk::partial_topk_by;
+#[cfg(test)]
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
+#[cfg(test)]
 const MAX_DENSE_ITEM_ID: u64 = 5_000_000;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -25,6 +29,7 @@ impl ScoredCandidate {
 }
 
 #[derive(Debug)]
+#[cfg(test)]
 pub(crate) struct CandidateMergeWorkspace {
     max_item_id: usize,
     seen_generation: AlignedBuffer<u32>,
@@ -35,6 +40,7 @@ pub(crate) struct CandidateMergeWorkspace {
     generation: u32,
 }
 
+#[cfg(test)]
 impl CandidateMergeWorkspace {
     pub(crate) fn new(max_item_id: u64) -> Self {
         let max_item_id = usize::try_from(max_item_id).expect("max item id fits usize");
@@ -118,6 +124,7 @@ impl CandidateMergeWorkspace {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn merge_filter_topk(
     candidates: &[ScoredCandidate],
     seen_item_ids: &[u64],
@@ -145,10 +152,27 @@ pub(crate) fn merge_filter_topk(
     merge_filter_topk_hash(candidates, seen_item_ids, k)
 }
 
+pub(crate) fn merge_filter_all(
+    candidates: &[ScoredCandidate],
+    seen_item_ids: &[u64],
+) -> Vec<ScoredCandidate> {
+    merge_filter_hash(candidates, seen_item_ids)
+}
+
+#[cfg(test)]
 fn merge_filter_topk_hash(
     candidates: &[ScoredCandidate],
     seen_item_ids: &[u64],
     k: usize,
+) -> Vec<ScoredCandidate> {
+    let mut output = merge_filter_hash(candidates, seen_item_ids);
+    partial_topk_by(&mut output, k, scored_candidate_desc);
+    output
+}
+
+fn merge_filter_hash(
+    candidates: &[ScoredCandidate],
+    seen_item_ids: &[u64],
 ) -> Vec<ScoredCandidate> {
     let seen: HashSet<u64> = seen_item_ids.iter().copied().collect();
     let mut merged: HashMap<u64, ScoredCandidate> = HashMap::new();
@@ -169,11 +193,10 @@ fn merge_filter_topk_hash(
             .or_insert(*candidate);
     }
 
-    let mut output: Vec<ScoredCandidate> = merged.into_values().collect();
-    partial_topk_by(&mut output, k, scored_candidate_desc);
-    output
+    merged.into_values().collect()
 }
 
+#[cfg(test)]
 fn scored_candidate_desc(left: &ScoredCandidate, right: &ScoredCandidate) -> Ordering {
     right
         .score

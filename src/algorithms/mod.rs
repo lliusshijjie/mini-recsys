@@ -1,5 +1,6 @@
 //! Low-level reusable recommendation algorithms.
 
+#[cfg(test)]
 mod aligned;
 mod candidate_merge;
 mod topk;
@@ -8,8 +9,10 @@ mod vector;
 #[cfg(test)]
 pub(crate) use aligned::AlignedBuffer;
 #[cfg(test)]
+pub(crate) use candidate_merge::merge_filter_topk;
+#[cfg(test)]
 pub(crate) use candidate_merge::CandidateMergeWorkspace;
-pub(crate) use candidate_merge::{merge_filter_topk, ScoredCandidate};
+pub(crate) use candidate_merge::{merge_filter_all, ScoredCandidate};
 pub(crate) use topk::partial_topk_by;
 pub(crate) use vector::cosine_similarity_simd;
 #[cfg(test)]
@@ -105,6 +108,27 @@ mod tests {
         assert_eq!(
             merged,
             vec![ScoredCandidate::new(u64::MAX - 1, 0.7, 0b0011)]
+        );
+    }
+
+    #[test]
+    fn candidate_merge_all_merges_without_topk_order_contract() {
+        let hits = vec![
+            ScoredCandidate::new(30, 0.6, 0b0001),
+            ScoredCandidate::new(10, 0.4, 0b0010),
+            ScoredCandidate::new(30, 0.9, 0b0100),
+            ScoredCandidate::new(20, 0.8, 0b1000),
+        ];
+
+        let mut merged = merge_filter_all(&hits, &[20]);
+        merged.sort_by_key(|candidate| candidate.item_id);
+
+        assert_eq!(
+            merged,
+            vec![
+                ScoredCandidate::new(10, 0.4, 0b0010),
+                ScoredCandidate::new(30, 0.9, 0b0101),
+            ]
         );
     }
 

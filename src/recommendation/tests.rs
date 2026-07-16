@@ -4,6 +4,8 @@ use crate::ffi::{HnswConfig, HnswIndex};
 use crate::model::{category_base_vector, Item, User, UserProfile, DIM};
 use crate::recommendation::service::{UserContext, UserContextCache, UserContextCacheConfig};
 use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::{Duration, Instant};
 
 fn normalized_category(category: &str) -> Vec<f32> {
@@ -584,6 +586,12 @@ fn recent_ann_quality_against_exact() {
     run_recent_ann_quality_benchmark();
 }
 
+#[test]
+#[ignore]
+fn recommendation_pipeline_performance_matrix() {
+    run_recommendation_pipeline_performance_matrix();
+}
+
 fn run_recent_ann_quality_benchmark() {
     let dataset_sizes = parse_usize_list_env("MINI_RECSYS_PERF_DATASETS", &[10_000]);
     let ann_k = env_usize("MINI_RECSYS_RECENT_ANN_K", 200);
@@ -700,6 +708,130 @@ fn run_recent_ann_quality_benchmark() {
     }
 }
 
+fn run_recommendation_pipeline_performance_matrix() {
+    let dataset_sizes = parse_usize_list_env("MINI_RECSYS_PERF_DATASETS", &[10_000, 50_000]);
+    let concurrency_levels = parse_usize_list_env("MINI_RECSYS_PERF_CONCURRENCY", &[1, 8, 32]);
+    let query_count = env_usize("MINI_RECSYS_PERF_QUERIES", 256);
+    let semantic_k = env_usize("MINI_RECSYS_PIPELINE_SEMANTIC_K", 100);
+    let recent_ann_k = env_usize("MINI_RECSYS_PIPELINE_RECENT_ANN_K", 100);
+
+    for dataset_size in dataset_sizes {
+        let build_started = Instant::now();
+        let items = Arc::new(benchmark_items(dataset_size));
+        let indexes = Arc::new(RecommendationIndexes::from_items(&items));
+        let hnsw = Arc::new(
+            HnswIndex::new(&HnswConfig {
+                dim: DIM,
+                max_elements: dataset_size + 16,
+                m: 16,
+                ef_construction: 200,
+                ef_search: semantic_k.max(recent_ann_k).max(100),
+            })
+            .expect("pipeline benchmark index should initialize"),
+        );
+        for item in items.iter() {
+            hnsw.add_item(item.id, &item.embedding).unwrap();
+        }
+        let build_ms = build_started.elapsed().as_secs_f64() * 1000.0;
+
+        for concurrency in &concurrency_levels {
+            let samples = Arc::new(Mutex::new(Vec::with_capacity(query_count)));
+            let candidate_counts = Arc::new(Mutex::new(Vec::with_capacity(query_count)));
+            let started = Instant::now();
+            let mut handles = Vec::new();
+            let per_thread = query_count.div_ceil(*concurrency);
+
+            for thread_index in 0..*concurrency {
+                let items = Arc::clone(&items);
+                let indexes = Arc::clone(&indexes);
+                let hnsw = Arc::clone(&hnsw);
+                let samples = Arc::clone(&samples);
+                let candidate_counts = Arc::clone(&candidate_counts);
+                let handle = thread::spawn(move || {
+                    for query_offset in 0..per_thread {
+                        let query_index = thread_index * per_thread + query_offset;
+                        if query_index >= query_count {
+                            break;
+                        }
+
+                        let user = benchmark_user(query_index as u64);
+                        let seed_item_id = benchmark_seed_item_id(query_index, dataset_size);
+                        let seed_item = &items[(seed_item_id - 1) as usize];
+                        let recent_events = vec![BehaviorEvent::new(
+                            user.id,
+                            seed_item_id,
+                            EventType::Click,
+                            &seed_item.category,
+                        )];
+
+                        let query_started = Instant::now();
+                        let semantic_hits = hnsw.search(&user.embedding, semantic_k).unwrap();
+                        let recent_ann_hits = hnsw
+                            .search_batch(&[seed_item.embedding.clone()], recent_ann_k)
+                            .unwrap();
+                        let output = build_recommendations_with_indexes(
+                            &user,
+                            &items,
+                            &indexes,
+                            &semantic_hits,
+                            &|item_id| benchmark_is_seen(user.id, item_id),
+                            RecommendationConfig {
+                                limit: 10,
+                                exploration_slots: 1,
+                                recent_events,
+                                recent_recall_mode: RecentRecallMode::Ann,
+                                recent_ann_hits: vec![(seed_item_id, recent_ann_hits[0].clone())],
+                                recall_parallel_min_items: usize::MAX,
+                                ..Default::default()
+                            },
+                        );
+                        assert!(!output.items.is_empty());
+                        samples
+                            .lock()
+                            .unwrap()
+                            .push(query_started.elapsed().as_micros() as u64);
+                        candidate_counts
+                            .lock()
+                            .unwrap()
+                            .push(output.debug.candidate_count);
+                    }
+                });
+                handles.push(handle);
+            }
+
+            for handle in handles {
+                handle.join().unwrap();
+            }
+
+            let elapsed = started.elapsed().as_secs_f64();
+            let mut samples = samples.lock().unwrap().clone();
+            samples.sort_unstable();
+            let candidate_counts = candidate_counts.lock().unwrap();
+            let average_candidates = if candidate_counts.is_empty() {
+                0.0
+            } else {
+                candidate_counts.iter().sum::<usize>() as f64 / candidate_counts.len() as f64
+            };
+            let qps = query_count as f64 / elapsed.max(0.001);
+
+            println!(
+                "recommendation_pipeline_matrix dataset={} concurrency={} queries={} semantic_k={} recent_ann_k={} build_ms={:.2} qps={:.2} p50_us={} p95_us={} p99_us={} avg_candidates={:.1}",
+                dataset_size,
+                concurrency,
+                query_count,
+                semantic_k,
+                recent_ann_k,
+                build_ms,
+                qps,
+                percentile(&samples, 0.50),
+                percentile(&samples, 0.95),
+                percentile(&samples, 0.99),
+                average_candidates
+            );
+        }
+    }
+}
+
 fn benchmark_items(count: usize) -> Vec<Item> {
     let categories = ["Books", "Electronics", "Home", "Clothing"];
     (1..=count)
@@ -716,6 +848,34 @@ fn benchmark_items(count: usize) -> Vec<Item> {
             }
         })
         .collect()
+}
+
+fn benchmark_user(query_index: u64) -> User {
+    let categories = ["Books", "Electronics", "Home", "Clothing"];
+    let primary = categories[query_index as usize % categories.len()];
+    let secondary = categories[(query_index as usize + 1) % categories.len()];
+    User {
+        id: query_index + 1,
+        name: format!("Benchmark User {}", query_index + 1),
+        embedding: benchmark_embedding(10_000_000 + query_index, primary),
+        profile: UserProfile::build(&[(primary, 0.9), (secondary, 0.3)], 10.0, 250.0),
+    }
+}
+
+fn benchmark_seed_item_id(query_index: usize, dataset_size: usize) -> u64 {
+    ((query_index * 31) % dataset_size + 1) as u64
+}
+
+fn benchmark_is_seen(user_id: u64, item_id: u64) -> bool {
+    item_id % 97 == user_id % 97
+}
+
+fn percentile(samples: &[u64], ratio: f64) -> u64 {
+    if samples.is_empty() {
+        return 0;
+    }
+    let index = ((samples.len() - 1) as f64 * ratio).round() as usize;
+    samples[index]
 }
 
 fn benchmark_embedding(id: u64, category: &str) -> Vec<f32> {

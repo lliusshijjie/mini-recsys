@@ -1,7 +1,7 @@
 //! Candidate recall sources for recommendations.
 
 use crate::algorithms::{
-    cosine_similarity_simd, merge_filter_topk, partial_topk_by, ScoredCandidate,
+    cosine_similarity_simd, merge_filter_all, partial_topk_by, ScoredCandidate,
 };
 use crate::behavior::{BehaviorEvent, EventType};
 use crate::model::Item;
@@ -217,6 +217,7 @@ fn recall_category_profile(context: &RecallContext<'_>) -> Vec<RecallHit> {
         category_items.extend(
             item_ids
                 .iter()
+                .take(context.pool_size)
                 .filter_map(|item_id| context.indexes.item(context.items, *item_id)),
         );
     }
@@ -416,7 +417,7 @@ fn merge_primary_hits(
     scored_hits.extend(category_hits.into_iter().map(scored_hit_for_merge));
     scored_hits.extend(recent_hits.into_iter().map(scored_hit_for_merge));
 
-    merge_filter_topk(&scored_hits, &[], usize::MAX)
+    merge_filter_all(&scored_hits, &[])
         .into_iter()
         .map(|scored| (scored.item_id, candidate_from_scored(scored)))
         .collect()
