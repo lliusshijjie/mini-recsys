@@ -1,46 +1,50 @@
 # docs/
 
-Learning notes, mind maps, and project documentation for mini-recsys.
+mini-recsys 的学习笔记、思维导图与项目文档。
 
-## Layout
+## 目录说明
 
-| Directory | Purpose |
-|-----------|---------|
-| `project/` | mini-recsys-specific plans, architecture, and design docs |
-| `notes/` | General recommendation-system learning notes (Markdown) |
-| `mindmaps/` | XMind mind maps |
-| `snippets/` | Standalone experiments and code drafts (not production `src/`) |
-| `skills/` | Engineering notes for C++ serving and implementation |
+| 目录 | 用途 |
+|------|------|
+| `project/` | mini-recsys 项目计划、架构与设计文档 |
+| `notes/` | 推荐系统通用学习笔记（Markdown） |
+| `mindmaps/` | XMind 思维导图 |
+| `snippets/` | 独立实验与代码草稿（非生产 `src/`） |
+| `skills/` | C++ 在线服务与工程实现笔记 |
 
-## Notes structure
+## 笔记结构
 
-Notes are organized by recommendation pipeline stage:
+笔记按推荐漏斗阶段组织：
 
-| Directory | Stage | Topics |
-|-----------|-------|--------|
-| `notes/recall/` | Recall | vector search, collaborative filtering, two-tower models |
-| `notes/coarse-ranking/` | Coarse ranking | pre-rank models, Top-K filtering, batch inference |
-| `notes/fine-ranking/` | Fine ranking | features, feature crossing, sequence models, multi-objective learning |
-| `notes/rerank/` | Re-ranking | diversity, exploration, business rules (reserved) |
+| 目录 | 阶段 | 主题 |
+|------|------|------|
+| `notes/recall/` | 召回 | 向量检索、协同过滤、双塔模型 |
+| `notes/coarse-ranking/` | 粗排 | 预排序模型、Top-K 截断、批量推理 |
+| `notes/fine-ranking/` | 精排 | 特征工程、特征交叉、序列模型、多目标学习 |
+| `notes/rerank/` | 重排 | 多样性、探索利用、业务规则（预留） |
 
-### Index
+### 索引
 
 **recall/**
-- `vector_recall_complete_guide.md` — vector recall overview
-- `cf_recall_itemcf_swing_usercf.md` — ItemCF, Swing, UserCF
-- `two_tower_structure_and_training.md` — two-tower architecture and training
-- `two_tower_samples_online_update.md` — samples and online update
-- `recsys_recall_discrete_matrix_nn.md` — discrete features, matrix completion, NN lookup
+- `推荐系统向量召回阶段完整总结.md` — 向量召回总览
+- `推荐系统召回层_ItemCF_Swing_UserCF系统总结.md` — ItemCF、Swing、UserCF
+- `双塔模型_结构与训练方法.md` — 双塔架构与训练
+- `双塔模型_正负样本线上服务与模型更新.md` — 样本构造与线上更新
+- `推荐系统召回层_离散特征矩阵补全与最近邻查找.md` — 离散特征、矩阵补全、近邻检索
 
 **coarse-ranking/**
-- `推荐系统粗排模型学习笔记.md` — coarse ranking models and serving
+- `推荐系统粗排模型学习笔记.md` — 粗排模型与在线服务
 
 **fine-ranking/**
-- `推荐系统排序层特征与多模态建模学习笔记.md` — features and multimodal modeling
-- `推荐系统特征交叉与常见模型总结.md` — FM, DCN, LHUC, SENet
-- `推荐系统_行为序列_DIN_SIM学习笔记.md` — DIN and SIM sequence modeling
-- `推荐系统多目标学习与MMoE架构.md` — multi-objective learning and MMoE
-- `explainable-logistic-ranking-optimization.md` — explainable logistic regression ranking
+- `推荐系统排序层特征与多模态建模学习笔记.md` — 特征与多模态建模
+- `推荐系统特征交叉与常见模型总结.md` — FM、DCN、LHUC、SENet
+- `推荐系统_行为序列_DIN_SIM学习笔记.md` — DIN 与 SIM 序列建模
+- `推荐系统多目标学习与MMoE架构.md` — 多目标学习与 MMoE
+- `可解释逻辑回归排序优化方案.md` — 可解释逻辑回归排序
+
+**skills/**
+- `推荐系统召回阶段_C++服务端技术.md` — 召回阶段 C++ 服务端技术
+- `推荐系统排序层与C++服务端工程.md` — 排序层 C++ 服务端工程
 
 **project/**
-- `expansion-plan.md` — phased mini-recsys expansion plan
+- `mini-recsys三阶段扩展计划.md` — mini-recsys 分阶段扩展计划
