@@ -1,300 +1,269 @@
-import { useState, useEffect } from 'react'
-import axios from 'axios'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { ChartNoAxesColumn } from 'lucide-react'
 
-const API_BASE = 'http://localhost:3000'
+import {
+  getRecommendations,
+  listUsers,
+  recordEvent,
+  searchItems,
+} from './api'
+import MobileInspectorSheet from './components/MobileInspectorSheet'
+import Notice from './components/Notice'
+import ProductGrid from './components/ProductGrid'
+import RecommendationInspector from './components/RecommendationInspector'
+import ResultsHeader from './components/ResultsHeader'
+import ShopHeader from './components/ShopHeader'
 
-const CATEGORY_COLORS = {
-    Electronics: { bg: 'bg-blue-500/20', border: 'border-blue-500', text: 'text-blue-400' },
-    Books: { bg: 'bg-amber-500/20', border: 'border-amber-500', text: 'text-amber-400' },
-    Home: { bg: 'bg-emerald-500/20', border: 'border-emerald-500', text: 'text-emerald-400' },
-    Clothing: { bg: 'bg-pink-500/20', border: 'border-pink-500', text: 'text-pink-400' },
+function requestErrorMessage(error) {
+  return error?.response?.data?.error || error?.message || 'The request could not be completed.'
 }
 
 function App() {
-    const [users, setUsers] = useState([])
-    const [selectedUserId, setSelectedUserId] = useState(1)
-    const [currentUser, setCurrentUser] = useState(null)
-    const [recommendations, setRecommendations] = useState([])
-    const [loading, setLoading] = useState(false)
-    const [error, setError] = useState('')
-    const [responseTime, setResponseTime] = useState(null)
-    const [filteredCount, setFilteredCount] = useState(0)
-    const [searchQuery, setSearchQuery] = useState('')
-    const [searchResults, setSearchResults] = useState([])
-    const [isSearchMode, setIsSearchMode] = useState(false)
-    const [feedbackItemId, setFeedbackItemId] = useState(null)
+  const [users, setUsers] = useState([])
+  const [selectedUserId, setSelectedUserId] = useState(1)
+  const [currentUser, setCurrentUser] = useState(null)
+  const [recommendations, setRecommendations] = useState([])
+  const [searchResults, setSearchResults] = useState([])
+  const [mode, setMode] = useState('recommendations')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [activeQuery, setActiveQuery] = useState('')
+  const [recommendationUserId, setRecommendationUserId] = useState(null)
+  const [selectedItemId, setSelectedItemId] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [hasRequested, setHasRequested] = useState(false)
+  const [error, setError] = useState('')
+  const [responseTime, setResponseTime] = useState(null)
+  const [filteredCount, setFilteredCount] = useState(null)
+  const [feedbackItemId, setFeedbackItemId] = useState(null)
+  const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false)
+  const requestGeneration = useRef(0)
 
-    useEffect(() => {
-        axios.get(`${API_BASE}/users`)
-            .then(res => setUsers(res.data.users))
-            .catch(() => { })
-    }, [])
+  useEffect(() => {
+    let active = true
 
-    const fetchRecommendations = async () => {
-        setLoading(true)
-        setError('')
-        const start = performance.now()
-
-        try {
-            const res = await axios.get(`${API_BASE}/recommend?uid=${selectedUserId}`)
-            setCurrentUser(res.data.user)
-            setRecommendations(res.data.recommendations)
-            setFilteredCount(res.data.filtered_count || 0)
-            setResponseTime((performance.now() - start).toFixed(0))
-
-            res.data.recommendations.forEach(item => {
-                axios.post(`${API_BASE}/events`, {
-                    uid: selectedUserId,
-                    item_id: item.item_id,
-                    event_type: 'impression',
-                }).catch(() => { })
-            })
-        } catch (err) {
-            setError(err.response?.data?.error || err.message)
-            setRecommendations([])
-        } finally {
-            setLoading(false)
+    listUsers()
+      .then((loadedUsers) => {
+        if (!active) return
+        setUsers(loadedUsers)
+        if (loadedUsers.length > 0) {
+          setSelectedUserId((currentId) => (
+            loadedUsers.some((user) => user.id === currentId) ? currentId : loadedUsers[0].id
+          ))
         }
+      })
+      .catch((requestError) => {
+        if (active) setError(requestErrorMessage(requestError))
+      })
+
+    return () => {
+      active = false
     }
+  }, [])
 
-    const handleSearch = async () => {
-        if (!searchQuery.trim()) return
-        setLoading(true)
-        setError('')
-        setIsSearchMode(true)
-        const start = performance.now()
+  const items = mode === 'search' ? searchResults : recommendations
+  const selectedItem = useMemo(
+    () => items.find((item) => item.item_id === selectedItemId) || items[0] || null,
+    [items, selectedItemId],
+  )
 
-        try {
-            const res = await axios.get(`${API_BASE}/search?q=${encodeURIComponent(searchQuery)}`)
-            setSearchResults(res.data.results)
-            setRecommendations([])
-            setCurrentUser(null)
-            setResponseTime((performance.now() - start).toFixed(0))
-        } catch (err) {
-            setError(err.response?.data?.error || err.message)
-            setSearchResults([])
-        } finally {
-            setLoading(false)
-        }
+  const fetchRecommendations = async (userId = selectedUserId) => {
+    const generation = ++requestGeneration.current
+    setLoading(true)
+    setError('')
+    setMode('recommendations')
+    const startedAt = performance.now()
+
+    try {
+      const data = await getRecommendations(userId)
+      if (generation !== requestGeneration.current) return
+
+      const nextItems = data.recommendations || []
+      setCurrentUser(data.user || users.find((user) => user.id === userId) || null)
+      setRecommendations(nextItems)
+      setRecommendationUserId(userId)
+      setSearchResults([])
+      setActiveQuery('')
+      setFilteredCount(data.filtered_count ?? 0)
+      setResponseTime(Math.round(performance.now() - startedAt))
+      setSelectedItemId(nextItems[0]?.item_id ?? null)
+      setHasRequested(true)
+
+      nextItems.forEach((item) => {
+        recordEvent({
+          uid: userId,
+          itemId: item.item_id,
+          eventType: 'impression',
+        }).catch(() => {})
+      })
+    } catch (requestError) {
+      if (generation !== requestGeneration.current) return
+      setError(requestErrorMessage(requestError))
+      setRecommendations([])
+      setRecommendationUserId(null)
+      setSelectedItemId(null)
+      setHasRequested(true)
+    } finally {
+      if (generation === requestGeneration.current) setLoading(false)
     }
+  }
 
-    const sendFeedback = async (itemId, eventType) => {
-        setFeedbackItemId(itemId)
-        setError('')
+  const handleSearch = async () => {
+    const query = searchQuery.trim()
+    if (!query) return
 
-        try {
-            await axios.post(`${API_BASE}/events`, {
-                uid: selectedUserId,
-                item_id: itemId,
-                event_type: eventType,
-            })
-            await fetchRecommendations()
-        } catch (err) {
-            setError(err.response?.data?.error || err.message)
-        } finally {
-            setFeedbackItemId(null)
-        }
+    const generation = ++requestGeneration.current
+    setLoading(true)
+    setError('')
+    const startedAt = performance.now()
+
+    try {
+      const nextItems = await searchItems(query)
+      if (generation !== requestGeneration.current) return
+
+      setMode('search')
+      setSearchResults(nextItems)
+      setRecommendations([])
+      setRecommendationUserId(null)
+      setCurrentUser(null)
+      setActiveQuery(query)
+      setFilteredCount(null)
+      setResponseTime(Math.round(performance.now() - startedAt))
+      setSelectedItemId(nextItems[0]?.item_id ?? null)
+      setHasRequested(true)
+    } catch (requestError) {
+      if (generation !== requestGeneration.current) return
+      setMode('search')
+      setActiveQuery(query)
+      setError(requestErrorMessage(requestError))
+      setSearchResults([])
+      setSelectedItemId(null)
+      setHasRequested(true)
+    } finally {
+      if (generation === requestGeneration.current) setLoading(false)
     }
+  }
 
-    const getCategoryStyle = (cat) => CATEGORY_COLORS[cat] || CATEGORY_COLORS.Electronics
-    const formatReason = (reason) => (reason || 'recommended').replaceAll('_', ' ')
-    const formatSource = (source) => source || 'unknown'
+  const sendFeedback = async (itemId, eventType) => {
+    if (mode !== 'recommendations' || recommendationUserId !== selectedUserId || loading) return
 
-    return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-            {/* Header */}
-            <header className="border-b border-slate-700 bg-slate-900/80 backdrop-blur-sm sticky top-0 z-10">
-                <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-xl">🎯</div>
-                        <div>
-                            <h1 className="text-xl font-bold text-white">Mini-RecSys Dashboard</h1>
-                            <p className="text-xs text-slate-400">Rust + C++ FFI Recommendation Engine</p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-6">
-                        {filteredCount > 0 && (
-                            <div className="text-sm text-slate-400">
-                                Filtered: <span className="text-amber-400 font-semibold">{filteredCount}</span> seen
-                            </div>
-                        )}
-                        {responseTime && (
-                            <div className="text-sm text-slate-400">
-                                Response: <span className="text-green-400 font-semibold">{responseTime}ms</span>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </header>
+    const userId = selectedUserId
+    setFeedbackItemId(itemId)
+    setError('')
 
-            <main className="max-w-7xl mx-auto px-6 py-8">
-                {/* Control Bar */}
-                <div className="flex flex-wrap gap-4 mb-8 items-center">
-                    {/* Search Box */}
-                    <div className="flex gap-2">
-                        <input
-                            type="text"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                            placeholder="🔍 Semantic search..."
-                            className="px-4 py-3 rounded-lg bg-slate-800 border border-slate-600 text-white focus:border-purple-500 focus:outline-none w-[280px]"
-                        />
-                        <button
-                            onClick={handleSearch}
-                            disabled={loading || !searchQuery.trim()}
-                            className="px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 rounded-lg font-semibold text-white transition-all disabled:opacity-50"
-                        >
-                            🔍 Search
-                        </button>
-                    </div>
+    try {
+      await recordEvent({ uid: userId, itemId, eventType })
+      if (selectedUserId === userId && recommendationUserId === userId) {
+        await fetchRecommendations(userId)
+      }
+    } catch (requestError) {
+      setError(requestErrorMessage(requestError))
+    } finally {
+      setFeedbackItemId(null)
+    }
+  }
 
-                    <div className="border-l border-slate-600 h-8 mx-2"></div>
+  const handleUserChange = (userId) => {
+    requestGeneration.current += 1
+    setSelectedUserId(userId)
+    setCurrentUser(users.find((user) => user.id === userId) || null)
+    setRecommendations([])
+    setSearchResults([])
+    setRecommendationUserId(null)
+    setSelectedItemId(null)
+    setMode('recommendations')
+    setActiveQuery('')
+    setFilteredCount(null)
+    setResponseTime(null)
+    setHasRequested(false)
+    setLoading(false)
+    setFeedbackItemId(null)
+    setMobileInspectorOpen(false)
+  }
 
-                    <select
-                        value={selectedUserId}
-                        onChange={(e) => setSelectedUserId(Number(e.target.value))}
-                        className="px-4 py-3 rounded-lg bg-slate-800 border border-slate-600 text-white focus:border-blue-500 focus:outline-none min-w-[200px]"
-                    >
-                        {users.map(u => (
-                            <option key={u.id} value={u.id}>{u.name}</option>
-                        ))}
-                    </select>
+  const closeMobileInspector = useCallback(() => setMobileInspectorOpen(false), [])
+  const interactionsPending = loading || feedbackItemId !== null
 
-                    <button
-                        onClick={() => { setIsSearchMode(false); setSearchResults([]); fetchRecommendations(); }}
-                        disabled={loading}
-                        className="px-8 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 rounded-lg font-semibold text-white transition-all disabled:opacity-50"
-                    >
-                        {loading ? '⏳ Loading...' : '🚀 Recommend'}
-                    </button>
+  const inspector = (
+    <RecommendationInspector
+      mode={mode}
+      selectedItem={selectedItem}
+      responseTime={responseTime}
+      filteredCount={filteredCount}
+      query={activeQuery}
+    />
+  )
 
-                    {(currentUser || isSearchMode) && (
-                        <div className="ml-auto text-sm text-slate-400">
-                            {isSearchMode
-                                ? <>Searching: <span className="text-purple-400 font-medium">"{searchQuery}"</span></>
-                                : <>Showing results for: <span className="text-white font-medium">{currentUser?.name}</span></>
-                            }
-                        </div>
-                    )}
-                </div>
+  return (
+    <div className="app-shell">
+      <ShopHeader
+        users={users}
+        selectedUserId={selectedUserId}
+        onUserChange={handleUserChange}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
+        onSearch={handleSearch}
+        loading={interactionsPending}
+      />
 
-                {error && (
-                    <div className="p-4 mb-6 bg-red-900/30 border border-red-500/50 rounded-xl text-red-300">
-                        ⚠️ {error}
-                    </div>
-                )}
+      <main className="page-shell">
+        <ResultsHeader
+          mode={mode}
+          currentUser={currentUser || users.find((user) => user.id === selectedUserId)}
+          query={activeQuery}
+          itemCount={items.length}
+          responseTime={responseTime}
+          loading={loading}
+          onRefresh={fetchRecommendations}
+        />
 
-                {/* Results Grid */}
-                {(isSearchMode ? searchResults : recommendations).length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        {(isSearchMode ? searchResults : recommendations).map((item, idx) => {
-                            const style = getCategoryStyle(item.category)
-                            return (
-                                <div
-                                    key={item.item_id}
-                                    className={`group bg-slate-800/50 rounded-xl overflow-hidden border-2 ${style.border} hover:shadow-xl hover:shadow-blue-500/10 transition-all`}
-                                >
-                                    {/* Rank Badge */}
-                                    <div className="absolute top-3 left-3 w-8 h-8 bg-black/60 backdrop-blur rounded-full flex items-center justify-center text-sm font-bold text-white z-10">
-                                        #{idx + 1}
-                                    </div>
+        {selectedItem && (
+          <button
+            type="button"
+            className="mobile-inspector-trigger"
+            aria-label="Open recommendation diagnostics"
+            onClick={() => setMobileInspectorOpen(true)}
+          >
+            <ChartNoAxesColumn aria-hidden="true" />
+            <span>View diagnostics</span>
+          </button>
+        )}
 
-                                    {/* Image */}
-                                    <div className="relative aspect-[4/3] bg-slate-700">
-                                        <img
-                                            src={item.image_url}
-                                            alt={item.name}
-                                            className="w-full h-full object-cover"
-                                        />
-                                        <div className={`absolute top-3 right-3 px-2 py-1 rounded text-xs font-medium ${style.bg} ${style.text} backdrop-blur`}>
-                                            {item.category}
-                                        </div>
-                                    </div>
+        <Notice message={error} />
 
-                                    {/* Content */}
-                                    <div className="p-4">
-                                        <h3 className="font-semibold text-white mb-1 line-clamp-2 group-hover:text-blue-400 transition-colors">
-                                            {item.name}
-                                        </h3>
-                                        <p className="text-xl font-bold text-green-400 mb-3">${item.price.toFixed(2)}</p>
+        <div className="content-layout">
+          <section className="results-region" aria-label="Products">
+            <ProductGrid
+              items={items}
+              mode={mode}
+              selectedItemId={selectedItem?.item_id ?? null}
+              feedbackItemId={feedbackItemId}
+              interactionsDisabled={
+                interactionsPending
+                || mode !== 'recommendations'
+                || recommendationUserId !== selectedUserId
+              }
+              onSelect={setSelectedItemId}
+              onFeedback={sendFeedback}
+              loading={loading}
+              hasRequested={hasRequested}
+              onReturnToRecommendations={fetchRecommendations}
+            />
+          </section>
 
-                                        <div className="mb-3 flex flex-wrap gap-2 text-xs">
-                                            <span className="px-2 py-1 rounded bg-slate-900/70 text-slate-300 border border-slate-700">
-                                                {formatSource(item.source)}
-                                            </span>
-                                            <span className="px-2 py-1 rounded bg-slate-900/70 text-blue-300 border border-slate-700">
-                                                {formatReason(item.reason)}
-                                            </span>
-                                        </div>
-
-                                        {!isSearchMode && (
-                                            <div className="mb-3 grid grid-cols-2 gap-2">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => sendFeedback(item.item_id, 'like')}
-                                                    disabled={feedbackItemId === item.item_id}
-                                                    className="px-3 py-2 rounded bg-emerald-600/80 hover:bg-emerald-500 text-white text-sm font-medium transition-colors disabled:opacity-50"
-                                                >
-                                                    Like
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => sendFeedback(item.item_id, 'dismiss')}
-                                                    disabled={feedbackItemId === item.item_id}
-                                                    className="px-3 py-2 rounded bg-slate-700 hover:bg-slate-600 text-slate-100 text-sm font-medium transition-colors disabled:opacity-50"
-                                                >
-                                                    Dismiss
-                                                </button>
-                                            </div>
-                                        )}
-
-                                        {/* Scores */}
-                                        <div className="grid grid-cols-2 gap-2 text-center bg-slate-900/50 rounded-lg p-2">
-                                            <div>
-                                                <p className="text-[10px] text-slate-500">Final</p>
-                                                <p className="text-sm font-bold text-green-400">{(item.final_score ?? 0).toFixed(4)}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] text-slate-500">Sim</p>
-                                                <p className="text-sm font-medium text-blue-400">{(item.sim_score ?? 0).toFixed(4)}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] text-slate-500">Cat</p>
-                                                <p className="text-sm font-medium text-amber-400">{(item.category_score ?? 0).toFixed(4)}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] text-slate-500">Pop</p>
-                                                <p className="text-sm font-medium text-purple-400">{(item.popularity ?? 0).toFixed(4)}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] text-slate-500">Price</p>
-                                                <p className="text-sm font-medium text-cyan-400">{(item.price_affinity ?? 0).toFixed(4)}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] text-slate-500">Novel</p>
-                                                <p className="text-sm font-medium text-pink-400">{(item.novelty ?? 0).toFixed(4)}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-[10px] text-slate-500">Feedback</p>
-                                                <p className="text-sm font-medium text-emerald-400">{(item.feedback_score ?? 0).toFixed(4)}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            )
-                        })}
-                    </div>
-                ) : !loading && !error && (
-                    <div className="text-center py-20">
-                        <div className="text-6xl mb-4">🎯</div>
-                        <h3 className="text-xl font-semibold text-slate-400 mb-2">Ready to Recommend</h3>
-                        <p className="text-slate-500">Select a user and click the button</p>
-                    </div>
-                )}
-            </main>
+          <aside className="desktop-inspector" aria-label="Recommendation diagnostics">
+            {inspector}
+          </aside>
         </div>
-    )
+      </main>
+
+      <MobileInspectorSheet
+        open={mobileInspectorOpen}
+        onClose={closeMobileInspector}
+      >
+        {inspector}
+      </MobileInspectorSheet>
+    </div>
+  )
 }
 
 export default App

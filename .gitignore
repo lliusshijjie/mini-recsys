@@ -23,6 +23,8 @@
 # Build directories
 /build/
 /dist/
+/frontend/dist/
+/output/playwright/
 
 # OS-specific files
 Thumbs.db
