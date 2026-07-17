@@ -11,7 +11,6 @@ use crate::recommendation::rank::RankingStrategyKind;
 use crate::recommendation::recall::recent_positive_seed_ids;
 use crate::recommendation::types::{RecentRecallMode, RecommendationConfig, RecommendationOutput};
 use crate::storage::Storage;
-use fastbloom_rs::Membership;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -216,10 +215,6 @@ impl RecommendationService {
 
         let storage_started = Instant::now();
         let context = self.user_context(uid)?;
-        let filter = self
-            .storage
-            .get_user_filter(uid)
-            .map_err(RecommendationServiceError::Storage)?;
         let storage_duration_micros = storage_started.elapsed().as_micros() as u64;
 
         let recent_recall_mode = RecentRecallMode::from_env();
@@ -237,7 +232,6 @@ impl RecommendationService {
             &self.items,
             &self.indexes,
             &semantic_hits,
-            &|item_id| filter.contains(&item_id.to_le_bytes()),
             RecommendationConfig {
                 ranking_strategy: RankingStrategyKind::from_env(),
                 preferences: Some(context.preferences),

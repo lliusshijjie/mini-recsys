@@ -92,15 +92,14 @@ fn pipeline_merges_sources_filters_seen_and_explains_results() {
         item(5, "Clothing", 0.30, 45.0),
     ];
     let semantic_hits = vec![(1, 0.95), (2, 0.92), (3, 0.10)];
-    let seen: HashSet<u64> = [1].into_iter().collect();
 
     let output = build_recommendations(
         &user,
         &items,
         &semantic_hits,
-        &|item_id| seen.contains(&item_id),
         RecommendationConfig {
             limit: 4,
+            recent_events: vec![BehaviorEvent::new(1, 1, EventType::Dismiss, "Books")],
             ..Default::default()
         },
     );
@@ -136,7 +135,6 @@ fn indexed_pipeline_matches_default_pipeline_output() {
     let recent_events = vec![BehaviorEvent::new(1, 1, EventType::Click, "Books")];
     let mut preferences = UserPreferences::default();
     preferences.set_item_weight(3, 1.0);
-    let seen: HashSet<u64> = [1].into_iter().collect();
     let config = RecommendationConfig {
         limit: 4,
         preferences: Some(preferences),
@@ -144,21 +142,9 @@ fn indexed_pipeline_matches_default_pipeline_output() {
         ..Default::default()
     };
 
-    let baseline = build_recommendations(
-        &user,
-        &items,
-        &semantic_hits,
-        &|item_id| seen.contains(&item_id),
-        config.clone(),
-    );
-    let indexed = build_recommendations_with_indexes(
-        &user,
-        &items,
-        &indexes,
-        &semantic_hits,
-        &|item_id| seen.contains(&item_id),
-        config,
-    );
+    let baseline = build_recommendations(&user, &items, &semantic_hits, config.clone());
+    let indexed =
+        build_recommendations_with_indexes(&user, &items, &indexes, &semantic_hits, config);
 
     assert_eq!(
         baseline
@@ -215,7 +201,6 @@ fn pipeline_limits_category_dominance_in_top_results() {
         &user,
         &items,
         &semantic_hits,
-        &|_| false,
         RecommendationConfig {
             limit: 5,
             max_per_category: 2,
@@ -245,7 +230,6 @@ fn default_ranking_strategy_uses_fixed_weights() {
         &user,
         &items,
         &[(1, 0.70)],
-        &|_| false,
         RecommendationConfig {
             limit: 1,
             exploration_slots: 0,
@@ -272,7 +256,6 @@ fn reserved_machine_learning_strategy_keeps_current_scores_until_model_exists() 
         &user,
         &items,
         &[(1, 0.70), (2, 0.20)],
-        &|_| false,
         RecommendationConfig {
             limit: 2,
             exploration_slots: 0,
@@ -284,7 +267,6 @@ fn reserved_machine_learning_strategy_keeps_current_scores_until_model_exists() 
         &user,
         &items,
         &[(1, 0.70), (2, 0.20)],
-        &|_| false,
         RecommendationConfig {
             limit: 2,
             exploration_slots: 0,
@@ -319,7 +301,6 @@ fn ranking_changes_when_feedback_preferences_are_present() {
         &user,
         &items,
         &semantic_hits,
-        &|_| false,
         RecommendationConfig {
             limit: 2,
             exploration_slots: 0,
@@ -335,7 +316,6 @@ fn ranking_changes_when_feedback_preferences_are_present() {
         &user,
         &items,
         &semantic_hits,
-        &|_| false,
         RecommendationConfig {
             limit: 2,
             exploration_slots: 0,
@@ -367,7 +347,6 @@ fn output_includes_debug_metadata_for_evaluation() {
         &user,
         &items,
         &[(1, 0.90), (2, 0.30)],
-        &|_| false,
         RecommendationConfig {
             limit: 2,
             exploration_slots: 0,
@@ -422,7 +401,6 @@ fn recent_click_recall_adds_similar_items() {
         &user,
         &items,
         &[],
-        &|_| false,
         RecommendationConfig {
             limit: 3,
             exploration_slots: 0,
@@ -464,7 +442,6 @@ fn recent_ann_mode_uses_injected_ann_hits() {
         &user,
         &items,
         &[],
-        &|_| false,
         RecommendationConfig {
             limit: 3,
             exploration_slots: 0,
@@ -509,7 +486,6 @@ fn recent_shadow_mode_records_quality_but_keeps_exact_results() {
         &user,
         &items,
         &[],
-        &|_| false,
         RecommendationConfig {
             limit: 3,
             exploration_slots: 0,
@@ -549,7 +525,6 @@ fn parallel_recall_matches_serial_recall_output() {
         &user,
         &items,
         &semantic_hits,
-        &|_| false,
         RecommendationConfig {
             limit: 4,
             exploration_slots: 0,
@@ -562,7 +537,6 @@ fn parallel_recall_matches_serial_recall_output() {
         &user,
         &items,
         &semantic_hits,
-        &|_| false,
         RecommendationConfig {
             limit: 4,
             exploration_slots: 0,
@@ -632,7 +606,6 @@ fn run_recent_ann_quality_benchmark() {
             &items,
             &indexes,
             &[],
-            &|_| false,
             RecommendationConfig {
                 limit: 10,
                 exploration_slots: 0,
@@ -650,7 +623,6 @@ fn run_recent_ann_quality_benchmark() {
             &items,
             &indexes,
             &[],
-            &|_| false,
             RecommendationConfig {
                 limit: 10,
                 exploration_slots: 0,
@@ -667,7 +639,6 @@ fn run_recent_ann_quality_benchmark() {
             &items,
             &indexes,
             &[],
-            &|_| false,
             RecommendationConfig {
                 limit: 10,
                 exploration_slots: 0,
@@ -774,7 +745,6 @@ fn run_recommendation_pipeline_performance_matrix() {
                             &items,
                             &indexes,
                             &semantic_hits,
-                            &|item_id| benchmark_is_seen(user.id, item_id),
                             RecommendationConfig {
                                 limit: 10,
                                 exploration_slots: 1,
@@ -864,10 +834,6 @@ fn benchmark_user(query_index: u64) -> User {
 
 fn benchmark_seed_item_id(query_index: usize, dataset_size: usize) -> u64 {
     ((query_index * 31) % dataset_size + 1) as u64
-}
-
-fn benchmark_is_seen(user_id: u64, item_id: u64) -> bool {
-    item_id % 97 == user_id % 97
 }
 
 fn percentile(samples: &[u64], ratio: f64) -> u64 {
@@ -967,7 +933,6 @@ fn recent_item_recall_ignores_impression_and_dismiss_events() {
         &user,
         &items,
         &[],
-        &|_| false,
         RecommendationConfig {
             limit: 3,
             exploration_slots: 0,
@@ -985,4 +950,108 @@ fn recent_item_recall_ignores_impression_and_dismiss_events() {
         .debug
         .source_distribution
         .contains_key("recent_item_similarity"));
+}
+
+#[test]
+fn impression_deboosts_but_does_not_filter_recommendations() {
+    let user = User {
+        id: 1,
+        name: "Exposure user".to_string(),
+        embedding: normalized_category("Books"),
+        profile: UserProfile::default(),
+    };
+    let items = vec![item(1, "Books", 0.90, 20.0), item(2, "Books", 0.85, 22.0)];
+    let semantic_hits = vec![(1, 0.90), (2, 0.85)];
+    let baseline = build_recommendations(
+        &user,
+        &items,
+        &semantic_hits,
+        RecommendationConfig {
+            limit: 2,
+            exploration_slots: 0,
+            ..Default::default()
+        },
+    );
+    let exposed = build_recommendations(
+        &user,
+        &items,
+        &semantic_hits,
+        RecommendationConfig {
+            limit: 2,
+            exploration_slots: 0,
+            recent_events: vec![BehaviorEvent::new(1, 1, EventType::Impression, "Books")],
+            ..Default::default()
+        },
+    );
+
+    let baseline_item = baseline
+        .items
+        .iter()
+        .find(|item| item.item_id == 1)
+        .unwrap();
+    let exposed_item = exposed.items.iter().find(|item| item.item_id == 1).unwrap();
+
+    assert_eq!(exposed.filtered_count, 0);
+    assert_eq!(exposed.debug.exposure_adjusted_count, 1);
+    assert_eq!(exposed.debug.exposure_suppressed_count, 0);
+    assert!(exposed_item.final_score < baseline_item.final_score);
+}
+
+#[test]
+fn dismiss_suppresses_recommendations_and_counts_filtered_items() {
+    let user = User {
+        id: 1,
+        name: "Dismiss user".to_string(),
+        embedding: normalized_category("Books"),
+        profile: UserProfile::default(),
+    };
+    let items = vec![item(1, "Books", 0.90, 20.0), item(2, "Books", 0.85, 22.0)];
+
+    let output = build_recommendations(
+        &user,
+        &items,
+        &[(1, 0.90), (2, 0.85)],
+        RecommendationConfig {
+            limit: 2,
+            exploration_slots: 0,
+            recent_events: vec![BehaviorEvent::new(1, 1, EventType::Dismiss, "Books")],
+            ..Default::default()
+        },
+    );
+
+    assert_eq!(output.filtered_count, 1);
+    assert_eq!(output.debug.exposure_suppressed_count, 1);
+    assert!(!output.items.iter().any(|item| item.item_id == 1));
+}
+
+#[test]
+fn purchase_suppresses_item_but_preserves_category_feedback() {
+    let user = User {
+        id: 1,
+        name: "Purchase user".to_string(),
+        embedding: normalized_category("Books"),
+        profile: UserProfile::default(),
+    };
+    let items = vec![item(1, "Books", 0.90, 20.0), item(2, "Books", 0.85, 22.0)];
+    let mut preferences = UserPreferences::default();
+    preferences.apply_event(EventType::Purchase, &items[0]);
+
+    let output = build_recommendations(
+        &user,
+        &items,
+        &[(1, 0.90), (2, 0.85)],
+        RecommendationConfig {
+            limit: 2,
+            exploration_slots: 0,
+            preferences: Some(preferences),
+            recent_events: vec![BehaviorEvent::new(1, 1, EventType::Purchase, "Books")],
+            ..Default::default()
+        },
+    );
+
+    let remaining = output.items.iter().find(|item| item.item_id == 2).unwrap();
+
+    assert_eq!(output.filtered_count, 1);
+    assert!(!output.items.iter().any(|item| item.item_id == 1));
+    assert!(remaining.category_score > 0.0);
 }

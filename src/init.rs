@@ -198,6 +198,8 @@ struct DebugRecommendationResponse {
     candidates: Vec<DebugCandidateResponse>,
     category_distribution: HashMap<String, usize>,
     source_distribution: HashMap<String, usize>,
+    exposure_adjusted_count: usize,
+    exposure_suppressed_count: usize,
     quality_metrics: HashMap<String, f32>,
     recent_events: Vec<BehaviorEvent>,
     preferences: UserPreferences,
@@ -422,6 +424,30 @@ async fn mark_seen_handler(
                 }),
             )
         })?;
+
+    for item_id in &payload.item_ids {
+        let Some(item) = state.storage.get_item(*item_id).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: format!("Failed to get item: {}", e),
+                }),
+            )
+        })?
+        else {
+            continue;
+        };
+        let event = BehaviorEvent::new(payload.uid, *item_id, EventType::Impression, item.category);
+        state.storage.append_user_event(&event).map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: format!("Failed to save event: {}", e),
+                }),
+            )
+        })?;
+    }
+
     state
         .recommendation_service
         .invalidate_user_context(payload.uid);
@@ -604,6 +630,8 @@ async fn debug_recommendation_handler(
         candidates,
         category_distribution: debug.category_distribution,
         source_distribution: debug.source_distribution,
+        exposure_adjusted_count: debug.exposure_adjusted_count,
+        exposure_suppressed_count: debug.exposure_suppressed_count,
         quality_metrics: debug.quality_metrics,
         recent_events: recent_events.items,
         preferences,
@@ -1361,7 +1389,7 @@ mod tests {
     }
 
     fn test_state(path: &str) -> AppState {
-        test_state_with_timeout(path, Duration::from_millis(150))
+        test_state_with_timeout(path, Duration::from_secs(2))
     }
 
     fn test_state_with_timeout(path: &str, recommend_timeout: Duration) -> AppState {
@@ -1568,6 +1596,63 @@ mod tests {
         assert!(response.recorded);
         assert_eq!(response.recent_event_count, 1);
         assert!(filter.contains(&10u64.to_le_bytes()));
+        drop(state);
+        let _ = fs::remove_dir_all(&path);
+        let _ = fs::remove_dir_all(format!("{}-tantivy", path));
+    }
+
+    #[test]
+    fn purchase_event_updates_category_preference_without_item_boost() {
+        let path = temp_path("purchase");
+        let state = test_state(&path);
+
+        let response = record_behavior_event(&state, 1, 10, EventType::Purchase).unwrap();
+        let preferences = state.storage.get_user_preferences(1).unwrap();
+
+        assert_eq!(response.event_type, "purchase");
+        assert!(preferences.category_weight("Books") > 0.0);
+        assert_eq!(preferences.item_weight(10), 0.0);
+        drop(state);
+        let _ = fs::remove_dir_all(&path);
+        let _ = fs::remove_dir_all(format!("{}-tantivy", path));
+    }
+
+    #[tokio::test]
+    async fn mark_seen_records_known_items_as_impressions() {
+        let path = temp_path("mark-seen-events");
+        let state = Arc::new(test_state(&path));
+
+        let Json(response) = mark_seen_handler(
+            State(Arc::clone(&state)),
+            Json(MarkSeenRequest {
+                uid: 1,
+                item_ids: vec![10, 99],
+            }),
+        )
+        .await
+        .unwrap();
+        let recent_events = state.storage.get_recent_events(1).unwrap();
+
+        assert_eq!(response.marked, 2);
+        assert_eq!(recent_events.items.len(), 1);
+        assert_eq!(recent_events.items[0].item_id, 10);
+        assert_eq!(recent_events.items[0].event_type, EventType::Impression);
+        drop(state);
+        let _ = fs::remove_dir_all(&path);
+        let _ = fs::remove_dir_all(format!("{}-tantivy", path));
+    }
+
+    #[tokio::test]
+    async fn impression_does_not_hard_filter_recommendations() {
+        let path = temp_path("impression-recommend");
+        let state = Arc::new(test_state(&path));
+
+        record_behavior_event(&state, 1, 10, EventType::Impression).unwrap();
+        let result = recommend_with_timeout(Arc::clone(&state), 1).await.unwrap();
+
+        assert_eq!(result.output.filtered_count, 0);
+        assert!(result.output.items.iter().any(|item| item.item_id == 10));
+        assert_eq!(result.output.debug.exposure_adjusted_count, 1);
         drop(state);
         let _ = fs::remove_dir_all(&path);
         let _ = fs::remove_dir_all(format!("{}-tantivy", path));

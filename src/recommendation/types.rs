@@ -68,6 +68,8 @@ pub struct RecommendationDebug {
     pub candidates: Vec<DebugCandidate>,
     pub category_distribution: HashMap<String, usize>,
     pub source_distribution: HashMap<String, usize>,
+    pub exposure_adjusted_count: usize,
+    pub exposure_suppressed_count: usize,
     pub stage_durations_micros: HashMap<String, u64>,
     pub quality_metrics: HashMap<String, f32>,
 }

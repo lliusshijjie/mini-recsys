@@ -1,6 +1,7 @@
 //! Recommendation pipeline modules.
 
 mod explain;
+mod exposure;
 mod features;
 mod indexes;
 mod pipeline;

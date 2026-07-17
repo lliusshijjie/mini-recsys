@@ -2,6 +2,7 @@
 
 use crate::model::{Item, User};
 use crate::recommendation::explain::source_label;
+use crate::recommendation::exposure::{ExposureDecision, ExposurePolicy};
 use crate::recommendation::features::user_category_scores_for_categories;
 use crate::recommendation::indexes::RecommendationIndexes;
 use crate::recommendation::rank::{rank_candidate, score_desc};
@@ -18,11 +19,10 @@ pub fn build_recommendations(
     user: &User,
     items: &[Item],
     semantic_hits: &[(u64, f32)],
-    is_seen: &dyn Fn(u64) -> bool,
     config: RecommendationConfig,
 ) -> RecommendationOutput {
     let indexes = RecommendationIndexes::from_items(items);
-    build_recommendations_with_indexes(user, items, &indexes, semantic_hits, is_seen, config)
+    build_recommendations_with_indexes(user, items, &indexes, semantic_hits, config)
 }
 
 pub fn build_recommendations_with_indexes(
@@ -30,7 +30,6 @@ pub fn build_recommendations_with_indexes(
     items: &[Item],
     indexes: &RecommendationIndexes,
     semantic_hits: &[(u64, f32)],
-    is_seen: &dyn Fn(u64) -> bool,
     config: RecommendationConfig,
 ) -> RecommendationOutput {
     if items.is_empty() || config.limit == 0 {
@@ -57,22 +56,27 @@ pub fn build_recommendations_with_indexes(
         .collect();
     let candidate_count = candidates.len();
     let ranker = config.ranking_strategy.ranker();
+    let exposure_policy = ExposurePolicy::from_events(&config.recent_events);
 
     let merge_rank_started = Instant::now();
     let mut filtered_count = 0usize;
+    let mut exposure_adjusted_count = 0usize;
+    let mut exposure_suppressed_count = 0usize;
     let mut ranked = Vec::new();
 
     for candidate in candidates.into_values() {
-        if is_seen(candidate.item_id) {
-            filtered_count += 1;
-            continue;
-        }
-
         let Some(item) = indexes.item(items, candidate.item_id) else {
             continue;
         };
 
-        ranked.push(rank_candidate(
+        let exposure_decision = exposure_policy.decision(candidate.item_id);
+        if exposure_decision == ExposureDecision::Suppress {
+            filtered_count += 1;
+            exposure_suppressed_count += 1;
+            continue;
+        }
+
+        let mut ranked_item = rank_candidate(
             user,
             item,
             &candidate,
@@ -80,7 +84,12 @@ pub fn build_recommendations_with_indexes(
             &category_scores,
             indexes.price_stats(),
             ranker.as_ref(),
-        ));
+        );
+        if let ExposureDecision::Deboost(amount) = exposure_decision {
+            ranked_item.final_score = (ranked_item.final_score - amount).max(0.0);
+            exposure_adjusted_count += 1;
+        }
+        ranked.push(ranked_item);
     }
 
     ranked.sort_by(score_desc);
@@ -110,6 +119,8 @@ pub fn build_recommendations_with_indexes(
             candidates: debug_candidates,
             category_distribution,
             source_distribution,
+            exposure_adjusted_count,
+            exposure_suppressed_count,
             stage_durations_micros,
             quality_metrics,
         },

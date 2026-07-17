@@ -18,6 +18,7 @@ pub enum EventType {
     Click,
     Like,
     Dismiss,
+    Purchase,
 }
 
 impl EventType {
@@ -27,6 +28,7 @@ impl EventType {
             Self::Click => "click",
             Self::Like => "like",
             Self::Dismiss => "dismiss",
+            Self::Purchase => "purchase",
         }
     }
 
@@ -36,6 +38,7 @@ impl EventType {
             Self::Click => (0.15, 0.20),
             Self::Like => (0.30, 0.40),
             Self::Dismiss => (-0.25, -0.50),
+            Self::Purchase => (0.45, 0.0),
         }
     }
 }
@@ -49,6 +52,7 @@ impl FromStr for EventType {
             "click" => Ok(Self::Click),
             "like" => Ok(Self::Like),
             "dismiss" => Ok(Self::Dismiss),
+            "purchase" => Ok(Self::Purchase),
             _ => Err(format!("Unsupported event type: {}", value)),
         }
     }
@@ -190,7 +194,10 @@ mod tests {
         assert_eq!(EventType::from_str("click").unwrap(), EventType::Click);
         assert_eq!(EventType::from_str("like").unwrap(), EventType::Like);
         assert_eq!(EventType::from_str("dismiss").unwrap(), EventType::Dismiss);
-        assert!(EventType::from_str("purchase").is_err());
+        assert_eq!(
+            EventType::from_str("purchase").unwrap(),
+            EventType::Purchase
+        );
     }
 
     #[test]
@@ -214,6 +221,17 @@ mod tests {
 
         assert!(preferences.category_weight("Electronics") < 0.0);
         assert!(preferences.item_weight(3) < 0.0);
+    }
+
+    #[test]
+    fn purchase_increases_category_preference_without_item_boost() {
+        let mut preferences = UserPreferences::default();
+        let item = item(9, "Books");
+
+        preferences.apply_event(EventType::Purchase, &item);
+
+        assert!(preferences.category_weight("Books") > 0.0);
+        assert_eq!(preferences.item_weight(9), 0.0);
     }
 
     #[test]

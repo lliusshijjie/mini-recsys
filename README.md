@@ -19,7 +19,8 @@ clear extension point for future machine-learning ranking.
 
 The service is a single Rust API process that orchestrates storage, recall,
 ranking, reranking, and explanation. C++ owns the HNSW/vector-search kernel,
-while Rust owns request handling, filtering, merging, ranking, and debug output.
+while Rust owns request handling, exposure policy, merging, ranking, and debug
+output.
 
 ```mermaid
 flowchart TD
@@ -49,8 +50,8 @@ flowchart TD
     RecentShadow --> Merge
     RecentAnn --> Merge
 
-    Merge --> Seen[Seen-item Bloom filter]
-    Seen --> Rank[Fixed-weight ranker / ML-reserved fallback]
+    Merge --> Exposure[Exposure policy: suppress or deboost]
+    Exposure --> Rank[Fixed-weight ranker / ML-reserved fallback]
     Rank --> Rerank[Diversity and exploration rerank]
     Rerank --> Explain[Source labels, reasons, debug metrics]
     Explain --> Response[Recommendation response]
@@ -64,7 +65,7 @@ flowchart TD
 
     Events --> Storage
     Events --> Preferences[Update category / item preferences]
-    Events --> SeenWrite[Update seen Bloom filter on impression]
+    Events --> SeenWrite[Legacy Bloom marker on impression]
     Preferences --> Storage
     SeenWrite --> Storage
 ```
@@ -94,15 +95,17 @@ Key runtime boundaries:
   - default: `fixed_weights`
   - reserved: `machine_learning_reserved`
 - Lightweight reranking:
-  - seen-item filtering through Bloom filters
+  - exposure-aware policy that deboosts recent impressions and suppresses
+    dismiss/purchase events
   - category diversity in the top results
   - one exploration slot for a relevant non-top-scored item
 - Explainable recommendation responses with `source`, `reason`, feature scores,
   and `ranking_strategy`.
-- Behavior feedback through `impression`, `click`, `like`, and `dismiss` events.
+- Behavior feedback through `impression`, `click`, `like`, `dismiss`, and
+  `purchase` events.
 - Persisted recent events and lightweight category/item preference weights.
 - Debug output for candidate counts, recall sources, category distribution, and
-  source distribution.
+  source distribution, plus exposure adjustment/suppression counts.
 - Kubernetes-oriented service behavior with env-based configuration, live/ready
   probes, Prometheus-style metrics, and container manifests.
 - Hybrid search that combines vector search and Tantivy keyword search through
@@ -126,6 +129,7 @@ src/
     rank.rs               Ranking strategies and scoring
     rerank.rs             Diversity and exploration reranking
     explain.rs            Source and reason labels
+    exposure.rs           Exposure deboost/suppression policy
     features.rs           Ranking feature helpers
     types.rs              Pipeline input/output types
     tests.rs              Recommendation unit tests
@@ -174,7 +178,8 @@ API during local development.
 - `GET /recommend?uid=<user_id>`: returns explainable recommendations.
 - `GET /search?query=<text>`: runs hybrid vector and keyword search.
 - `POST /events`: records one behavior event and updates preferences.
-- `POST /mark_seen`: records seen item IDs in the user's Bloom filter.
+- `POST /mark_seen`: records legacy seen markers and appends impressions for
+  known item IDs.
 - `GET /debug/recommendation?uid=<user_id>`: returns recommendation debug data.
 - `GET /livez`: process liveness probe.
 - `GET /readyz`: readiness probe that succeeds after storage, indexes, model
@@ -210,8 +215,11 @@ Behavior events use a single-event request shape:
 }
 ```
 
-Supported `event_type` values are `impression`, `click`, `like`, and `dismiss`.
-`impression` also updates the Bloom filter used for seen-item filtering.
+Supported `event_type` values are `impression`, `click`, `like`, `dismiss`, and
+`purchase`. A recent `impression` deboosts the item instead of permanently
+filtering it. `dismiss` and `purchase` suppress the same item for a bounded
+window. The Bloom filter remains as a legacy marker for compatibility, but
+recommendation filtering is driven by recent typed behavior events.
 
 ## Configuration
 
