@@ -21,7 +21,7 @@ mini-recsys 的学习笔记、思维导图与项目文档。
 | `notes/recall/` | 召回 | 向量检索、协同过滤、双塔模型 |
 | `notes/coarse-ranking/` | 粗排 | 预排序模型、Top-K 截断、批量推理 |
 | `notes/fine-ranking/` | 精排 | 特征工程、特征交叉、序列模型、多目标学习 |
-| `notes/rerank/` | 重排 | 多样性、探索利用、业务规则（预留） |
+| `notes/rerank/` | 重排 | 多样性（MMR/DPP）、业务规则约束 |
 
 ## 命名规则
 
@@ -54,6 +54,10 @@ mini-recsys 的学习笔记、思维导图与项目文档。
 - `03-行为序列-DIN-SIM.md` — DIN 与 SIM 序列建模
 - `04-多目标-MMoE.md` — 多目标学习与 MMoE
 - `05-可解释逻辑回归.md` — 可解释逻辑回归排序
+
+**rerank/**
+- `01-多样性-MMR-DPP.md` — MMR、DPP 多样性重排
+- `02-业务规则与C++实现.md` — 业务规则约束与 C++ 实现
 
 **skills/**
 - `召回-C++服务端.md` — 召回阶段 C++ 服务端技术
