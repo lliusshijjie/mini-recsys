@@ -4,18 +4,29 @@ This directory contains standalone feasibility experiments for optimizing hot
 candidate operations in the recommendation recall path. The code is intentionally
 not wired into the production Rust crate, `build.rs`, or the C++ HNSW index.
 
-Current experiments live under `recall_kernels/` and compare Rust and C++
-implementations of:
+## Experiments
+
+### `recall_kernels/`
+
+Compare Rust and C++ implementations of:
 
 - seen filtering, duplicate merging, source-mask merging, and deterministic
   top-k selection;
 - 64-byte aligned reusable workspaces for hot arrays;
 - scalar versus AVX SIMD dot products for contiguous `f32` vectors.
 
-Run the full local check and benchmark from the repository root:
-
 ```powershell
 .\experiments\recall_kernels\run.ps1
+```
+
+### `rerank_diversity/`
+
+MMR and greedy-MAP DPP diversity rerankers in Rust and C++, validated against a
+fixture derived from `assets/products.json`. Intended as a future replacement
+for the production category-cap rerank heuristic.
+
+```powershell
+.\experiments\rerank_diversity\run.ps1
 ```
 
 ## Latest Local Results
