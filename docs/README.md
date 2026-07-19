@@ -22,6 +22,8 @@ mini-recsys 的学习笔记、思维导图与项目文档。
 | `notes/coarse-ranking/` | 粗排 | 预排序模型、Top-K 截断、批量推理 |
 | `notes/fine-ranking/` | 精排 | 特征工程、特征交叉、序列模型、多目标学习 |
 | `notes/rerank/` | 重排 | 多样性（MMR/DPP）、业务规则约束 |
+| `notes/cold-start/` | 冷启动 | 物品冷启动 |
+| `notes/growth/` | 涨指标 | 提指标、实验与优化方法 |
 
 ## 命名规则
 
@@ -58,6 +60,9 @@ mini-recsys 的学习笔记、思维导图与项目文档。
 **rerank/**
 - `01-多样性-MMR-DPP.md` — MMR、DPP 多样性重排
 - `02-业务规则与C++实现.md` — 业务规则约束与 C++ 实现
+
+**cold-start/**
+- `01-总论.md` — 物品冷启动总论
 
 **skills/**
 - `召回-C++服务端.md` — 召回阶段 C++ 服务端技术
