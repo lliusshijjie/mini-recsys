@@ -7,23 +7,36 @@ mini-recsys 的学习笔记、思维导图与项目文档。
 | 目录 | 用途 |
 |------|------|
 | `project/` | mini-recsys 项目计划、架构与设计文档 |
-| `notes/` | 推荐系统通用学习笔记（Markdown） |
+| `notes/` | 学习笔记（Markdown） |
 | `mindmaps/` | XMind 思维导图 |
 | `snippets/` | 独立实验与代码草稿（非生产 `src/`） |
 | `skills/` | C++ 在线服务与工程实现笔记 |
 
 ## 笔记结构
 
-笔记按推荐漏斗阶段组织：
+`notes/` 按领域划分为两块：
+
+| 目录 | 用途 |
+|------|------|
+| `notes/recsys/` | 推荐系统学习笔记（按漏斗阶段分子目录） |
+| `notes/search/` | 搜索引擎学习笔记 |
+
+### `notes/recsys/` 子目录
 
 | 目录 | 阶段 | 主题 |
 |------|------|------|
-| `notes/recall/` | 召回 | 向量检索、协同过滤、双塔模型 |
-| `notes/coarse-ranking/` | 粗排 | 预排序模型、Top-K 截断、批量推理 |
-| `notes/fine-ranking/` | 精排 | 特征工程、特征交叉、序列模型、多目标学习 |
-| `notes/rerank/` | 重排 | 多样性（MMR/DPP）、业务规则约束 |
-| `notes/cold-start/` | 冷启动 | 物品冷启动 |
-| `notes/growth/` | 涨指标 | 提指标、实验与优化方法 |
+| `recall/` | 召回 | 向量检索、协同过滤、双塔模型 |
+| `coarse-ranking/` | 粗排 | 预排序模型、Top-K 截断、批量推理 |
+| `fine-ranking/` | 精排 | 特征工程、特征交叉、序列模型、多目标学习 |
+| `rerank/` | 重排 | 多样性（MMR/DPP）、业务规则约束 |
+| `cold-start/` | 冷启动 | 物品冷启动 |
+| `growth/` | 涨指标 | 提指标、实验与优化方法 |
+
+### `notes/search/` 子目录
+
+| 目录 | 主题 |
+|------|------|
+| `basics/` | 搜索引擎整体认识与基础概念 |
 
 ## 命名规则
 
@@ -40,32 +53,35 @@ mini-recsys 的学习笔记、思维导图与项目文档。
 
 ### 索引
 
-**recall/**
+**recsys/recall/**
 - `01-向量召回.md` — 向量召回总览
 - `02-协同过滤-ItemCF-Swing-UserCF.md` — ItemCF、Swing、UserCF
 - `03-双塔-结构与训练.md` — 双塔架构与训练
 - `04-双塔-样本与线上更新.md` — 样本构造与线上更新
 - `05-离散特征-矩阵补全与近邻.md` — 离散特征、矩阵补全、近邻检索
 
-**coarse-ranking/**
+**recsys/coarse-ranking/**
 - `01-粗排模型.md` — 粗排模型与在线服务
 
-**fine-ranking/**
+**recsys/fine-ranking/**
 - `01-特征与多模态.md` — 特征与多模态建模
 - `02-特征交叉-FM-DCN.md` — FM、DCN、LHUC、SENet
 - `03-行为序列-DIN-SIM.md` — DIN 与 SIM 序列建模
 - `04-多目标-MMoE.md` — 多目标学习与 MMoE
 - `05-可解释逻辑回归.md` — 可解释逻辑回归排序
 
-**rerank/**
+**recsys/rerank/**
 - `01-多样性-MMR-DPP.md` — MMR、DPP 多样性重排
 - `02-业务规则与C++实现.md` — 业务规则约束与 C++ 实现
 
-**cold-start/**
+**recsys/cold-start/**
 - `01-总论.md` — 物品冷启动总论
 - `02-双塔改进与类目关键词召回.md` — 双塔改进与类目关键词召回
 - `03-聚类召回与Look-Alike召回.md` — 聚类召回与 Look-Alike 召回
 - `04-流量调控与AB测试.md` — 流量调控与 AB 测试
+
+**search/basics/**
+- `01-整体认识.md` — 搜索引擎整体认识
 
 **skills/**
 - `召回-C++服务端.md` — 召回阶段 C++ 服务端技术
